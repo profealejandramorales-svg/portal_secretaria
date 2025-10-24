@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Permisos de Personal (Compartido)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CSS para asegurar que solo el voucher se imprima */
+        @media print {
+            .print\:hidden { display: none !important; }
+            .print\:static { position: static !important; }
+            .no-print { display: none !important; }
+            /* Asegurar que el fondo del voucher sea blanco al imprimir */
+            #voucher-print-area { background-color: white !important; }
+            /* Asegura que el voucher ocupe toda la página */
+            #voucher-print-area.fixed { position: absolute !important; width: 100% !important; height: 100% !important; }
+        }
+        .tab-button.active {
+            background-color: #10b981; /* green-500 */
+            color: white;
+            border-bottom-color: transparent;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div style="padding: 20px; text-align: center; color: #374151;">Iniciando aplicación...</div>
+    </div>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
+
+    <script>
+        // ====================================================================
+        // Íconos Simples (Pre-compilado)
+        // ====================================================================
+        const Icon = ({ children, className = "w-5 h-5", viewBox = "0 0 24 24", fill = "none", stroke = "currentColor", strokeWidth = 2, ...props }) => (
+            React.createElement("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: viewBox, fill: fill, stroke: stroke, strokeWidth: strokeWidth, strokeLinecap: "round", strokeLinejoin: "round", className: className, ...props }, children)
+        );
+
+        // Definiciones SVG simplificadas de Lucide (Pre-compilado):
+        const Calendar = (props) => React.createElement(Icon, props, React.createElement("path", { d: "M8 2v4" }), React.createElement("path", { d: "M16 2v4" }), React.createElement("rect", { width: "18", height: "18", x: "3", y: "4", rx: "2" }), React.createElement("path", { d: "M3 10h18" }));
+        const Clock = (props) => React.createElement(Icon, props, React.createElement("circle", { cx: "12", cy: "12", r: "10" }), React.createElement("path", { d: "M12 6v6l4 2" }));
+        const User = (props) => React.createElement(Icon, props, React.createElement("path", { d: "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" }), React.createElement("circle", { cx: "12", cy: "7", r: "4" }));
+        const PlusCircle = (props) => React.createElement(Icon, props, React.createElement("circle", { cx: "12", cy: "12", r: "10" }), React.createElement("path", { d: "M12 8v8" }), React.createElement("path", { d: "M8 12h8" }));
+        const Trash2 = (props) => React.createElement(Icon, props, React.createElement("path", { d: "M3 6h18" }), React.createElement("path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" }), React.createElement("path", { d: "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" }), React.createElement("line", { x1: "10", x2: "10", y1: "11", y2: "17" }), React.createElement("line", { x1: "14", x2: "14", y1: "11", y2: "17" }));
+        const Zap = (props) => React.createElement(Icon, props, React.createElement("polygon", { points: "13 2 3 14 12 14 11 22 21 10 12 10 13 2" }));
+        const AlertTriangle = (props) => React.createElement(Icon, props, React.createElement("path", { d: "m21.73 18-9.08-15.73a1.99 1.99 0 0 0-3.46 0L2.27 18a2 2 0 0 0 1.73 3h16a2 2 0 0 0 1.73-3z" }), React.createElement("path", { d: "M12 9v4" }), React.createElement("path", { d: "M12 17h.01" }));
+        const Shield = (props) => React.createElement(Icon, props, React.createElement("path", { d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" }));
+        const TrendingUp = (props) => React.createElement(Icon, props, React.createElement("polyline", { points: "15 17 20 12 15 7" }), React.createElement("path", { d: "M4 12h16" }));
+        const RefreshCcw = (props) => React.createElement(Icon, props, React.createElement("path", { d: "M20 18v2a2 2 0 0 1-2 2H4" }), React.createElement("path", { d: "M4 18V6a2 2 0 0 1 2-2h14" }), React.createElement("path", { d: "M15 7l5-5 5 5" }));
+        const Printer = (props) => React.createElement(Icon, props, React.createElement("polyline", { points: "6 9 6 2 18 2 18 9" }), React.createElement("path", { d: "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" }), React.createElement("rect", { width: "12", height: "8", x: "6", y: "14" }));
+        const XCircle = (props) => React.createElement(Icon, props, React.createElement("circle", { cx: "12", cy: "12", r: "10" }), React.createElement("path", { d: "m15 9-6 6" }), React.createElement("path", { d: "m9 9 6 6" }));
+        
+        const { useState, useEffect, useMemo } = React;
+        
+        // Inicialización de componentes Recharts
+        const RechartsComponents = typeof window.Recharts !== 'undefined' ? window.Recharts : {};
+        const { 
+            BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+        } = RechartsComponents;
+        
+        // --- Dependencias de Firebase ---
+        const firebase = window.firebase;
+        const { initializeApp } = firebase;
+        // --- FIN Dependencias de Firebase ---
+
+
+        // ====================================================================
+        // CONFIGURACIÓN DE FIREBASE (OBLIGATORIO PARA PERSISTENCIA)
+        // ====================================================================
+
+        // **USANDO CONFIGURACIÓN DE PROYECTO EXTERNO DEL USUARIO**
+        const firebaseConfig = {
+            apiKey: "AIzaSyBnSMVCH0yyYUWk5z54kTIPTrWkyoeWs-I",
+            authDomain: "suspenciones-40d0c.firebaseapp.com",
+            projectId: "suspenciones-40d0c",
+            storageBucket: "suspenciones-40d0c.firebasestorage.app",
+            messagingSenderId: "853418739042",
+            appId: "1:853418739042:web:d051befb99cd2acdd4583b",
+            measurementId: "G-L00J7XN6Y1"
+        };
+        
+        const initialAuthToken = null; 
+        const appId = firebaseConfig.projectId; 
+
+        // Definición de jornadas laborales para cálculos
+        const JORNADA_DIARIA_HORAS = 8;
+        const COMPANY_REP_NAME = "Miguel Díaz J."; // Nombre del representante de la empresa
+
+        // ====================================================================
+        // NÓMINA UNIFICADA DE DOCENTES Y ASISTENTES (INCRUSTADA)
+        // ====================================================================
+        const seededStaff = [
+            // DOCENTES (Rol: Profesor)
+            { id: '171569613', nombre: 'MATÍAS FABRICIANO PESSO SABANDO', rol: 'Profesor', jornada: 11, run: '17.156.961-3' },
+            { id: '171853966', nombre: 'JAVIER IGNACIO LARA FAÚNDEZ', rol: 'Profesor', jornada: 40, run: '17.185.396-6' },
+            { id: '205200495', nombre: 'CECILIA DE LOS ANGELES MUÑOZ SALAZAR', rol: 'Profesor', jornada: 24, run: '20.520.049-5' },
+            { id: '198962341', nombre: 'PERLA EDITH SEPÚLVEDA MARÍN', rol: 'Profesor', jornada: 29, run: '19.896.234-1' },
+            { id: '171840082', nombre: 'NATALIA DE LOS ANGELES REYES CEBALLOS', rol: 'Profesor', jornada: 40, run: '17.184.008-2' },
+            { id: '178859110', nombre: 'DANIELA ALEJANDRA FUENTES ALEGRÍA', rol: 'Profesor', jornada: 36, run: '17.885.911-0' },
+            { id: '183119753', nombre: 'JAVIERA CONSUELO FLORES GALDAMES', rol: 'Profesor', jornada: 25, run: '18.311.975-3' },
+            { id: '19697847K', nombre: 'DIEGO ANDRÉS LUNA RAMÍREZ', rol: 'Profesor', jornada: 38, run: '19.697.847-K' },
+            { id: '170392507', nombre: 'RENATO HERNÁN FLORIDOR ROJAS ROJAS', rol: 'Profesor', jornada: 28, run: '17.039.250-7' },
+            { id: '188934331', nombre: 'ÁNGELA GABRIELA TAPIA GONZÁLEZ', rol: 'Profesor', jornada: 42, run: '18.893.433-1' },
+            { id: '190102513', nombre: 'NICOLÁS IGNACIO LÓPEZ GONZÁLEZ', rol: 'Profesor', jornada: 44, run: '19.010.251-3' },
+            { id: '17039979K', nombre: 'JUAN PABLO RAMÍREZ ACUÑA', rol: 'Profesor', jornada: 44, run: '17.039.979-K' },
+            { id: '19207038K', nombre: 'EDUARDO LUIS RIVERA SOTO', rol: 'Profesor', jornada: 24, run: '19.207.038-K' },
+            { id: '186326610', nombre: 'LUIS FELIPE SOTO URBINA', rol: 'Profesor', jornada: 44, run: '18.632.661-0' },
+            { id: '170425712', nombre: 'MARÍA DANIELA SILVA BUSTAMANTE', rol: 'Profesor', jornada: 30, run: '17.042.571-2' },
+            { id: '172807353', nombre: 'CLAUDIO ANDRÉS ARDILES VALENCIA', rol: 'Profesor', jornada: 30, run: '17.280.735-3' },
+
+            // ASISTENTES DE LA EDUCACIÓN (Actualizada)
+            { id: '9651728', nombre: 'BERNARDITA ROSA LOBOS VERGARA', rol: 'MONITOR/A TALLER', jornada: 8, run: '9.651.728-9' },
+            { id: '11285289', nombre: 'LUZMILA DEL PILAR GONZÁLEZ ARAVENA', rol: 'AUXILIAR DE ASEO', jornada: 44, run: '11.285.289-1' },
+            { id: '9950645', nombre: 'LUIS EDGARDO MARIMÁN MARIMÁN', rol: 'CUIDADO ESTABLECIMIENTO', jornada: 44, run: '9.950.645-8' },
+            { id: '9593281', nombre: 'MARISOL DE LAS MERCEDES RAMÍREZ GONZÁLEZ', rol: 'AUXILIAR DE ASEO', jornada: 44, run: '9.593.281-9' },
+            { id: '16793129', nombre: 'MARILYN SOLANGE GONZÁLEZ ESPINOZA', rol: 'PSICÓLOGO/A', jornada: 44, run: '16.793.129-4' },
+            { id: '5841994', nombre: 'BERNARDITA DEL CARMEN CISTERNAS ARELLANO', rol: 'MONITOR/A TALLER', jornada: 5, run: '5.841.994-K' },
+            { id: '9453656', nombre: 'JUAN ENRIQUE TOLEDO SEPÚLVEDA', rol: 'OPERARIO', jornada: 44, run: '9.453.656-1' },
+            { id: '9142821', nombre: 'ENRIQUETA DEL CARMEN ESPINOSA TORRES', rol: 'CONTADOR/A', jornada: 44, run: '9.142.821-0' },
+            { id: '14021316', nombre: 'CLARA DEL PILAR PEÑA ASTROZA', rol: 'BIBLIOTECARIO/A', jornada: 44, run: '14.021.316-0' },
+            { id: '13788129', nombre: 'CRISTINA DE LAS MERCEDES CONTRERAS ÑANCULAF', rol: 'SECRETARIO/A', jornada: 44, run: '13.788.129-2' },
+            { id: '13372068', nombre: 'BERNARDITA ERNESTINA PEÑA ASTROZA', rol: 'INSPECTOR/A', jornada: 44, run: '13.372.068-5' },
+            { id: '11286151', nombre: 'ISAIAS HUMBERTO ORELLANA GONZÁLEZ', rol: 'MANIPULADOR ALIMENTOS', jornada: 44, run: '11.286.151-3' },
+            { id: '15569010', nombre: 'TERESA DE LAS MERCEDES NORAMBUENA GONZÁLEZ', rol: 'ASISTENTE SOCIAL', jornada: 44, run: '15.569.010-0' },
+            { id: '19824978', nombre: 'MARÍA JOSÉ SOTO REYES', rol: 'ASISTENTE DE AULA', jornada: 40, run: '19.824.978-5' },
+            { id: '16892355', nombre: 'MARCELA PAZ ORELLANA GONZÁLEZ', rol: 'PSICOPEDAGOGA', jornada: 44, run: '16.892.355-6' }
+        ];
+        // ====================================================================
+
+
+        // Seleccionar el primer funcionario por defecto
+        const initialSelectedStaffId = seededStaff.length > 0 ? seededStaff[0].id : '';
+
+        /**
+         * Lógica para calcular horas del permiso.
+         */
+        const calculateHours = (type, duration = 1, timeStart = null, timeEnd = null) => {
+            switch (type) {
+                case 'hours':
+                    return parseFloat(duration);
+                case 'half-day':
+                    return JORNADA_DIARIA_HORAS / 2;
+                case 'day':
+                    return JORNADA_DIARIA_HORAS;
+                case 'time-range':
+                    if (timeStart && timeEnd) {
+                        const [h1, m1] = timeStart.split(':').map(Number);
+                        const [h2, m2] = timeEnd.split(':').map(Number);
+                        
+                        // Convertir a minutos
+                        const totalMinutes1 = (h1 * 60) + m1;
+                        const totalMinutes2 = (h2 * 60) + m2;
+                        
+                        // Calcular la diferencia en minutos (manejar el caso de pasar la medianoche si fuera necesario, pero asumimos rango dentro de un día)
+                        let diffMinutes = totalMinutes2 - totalMinutes1;
+                        
+                        // Si la hora de fin es anterior a la de inicio, asumimos que es el día siguiente (ej. 23:00 a 02:00)
+                        if (diffMinutes < 0) {
+                            diffMinutes += 24 * 60; 
+                        }
+                        
+                        return diffMinutes / 60; // Devolver la diferencia en horas
+                    }
+                    return 0;
+                default:
+                    return 0;
+            }
+        };
+
+        /**
+         * Obtiene el label de duración para mostrar en el voucher.
+         */
+        const getPermissionLabel = (type, duration, hours, timeStart, timeEnd) => {
+            switch (type) {
+                case 'hours':
+                    return `${duration} hora${duration > 1 ? 's' : ''} (Manual)`;
+                case 'half-day':
+                    return `Medio día (${hours} hrs)`;
+                case 'day':
+                    return `Día completo (${hours} hrs)`;
+                case 'time-range':
+                    return `${timeStart} a ${timeEnd} (${hours.toFixed(2)} hrs)`;
+                default:
+                    return 'Desconocido';
+            }
+        };
+
+        /**
+         * Componente que renderiza la vista imprimible del Comprobante.
+         */
+        const VoucherPrintView = ({ permission, staffList, onClose, folio, staffSummary }) => { 
+            const { staffId, staffName, type, duration, details, date, reasonType, timeStart, timeEnd, presentsReceipt, leavesMaterial, isPaid } = permission;
+
+            const hours = calculateHours(type, duration, timeStart, timeEnd);
+            const dateFormatted = new Date(date).toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
+            const time = new Date().toLocaleTimeString('es-CL');
+            
+            // Buscar la información completa del funcionario (incluyendo RUN)
+            const staffDetails = staffList.find(s => s.id === staffId);
+            const staffRole = staffDetails?.rol || 'Personal';
+            const staffRun = staffDetails?.run || 'N/A';
+
+            const reasonLabel = reasonType === 'checkup' ? 'Control Médico' : 'Otro Motivo';
+            const durationLabel = getPermissionLabel(type, duration, hours, timeStart, timeEnd);
+            
+            // Estilos internos para asegurar la apariencia en la impresión
+            const voucherStyle = {
+                fontFamily: 'Arial, sans-serif',
+                maxWidth: '700px',
+                margin: '20px auto',
+                padding: '30px',
+                border: '1px solid #ccc',
+                backgroundColor: 'white',
+                boxShadow: '0 0 10px rgba(0,0,0,0.1)'
+            };
+            
+            return (
+                React.createElement("div", { id: "voucher-print-area", className: "w-full bg-gray-100 p-4 md:p-8 fixed inset-0 z-50 overflow-y-auto print:block print:static" },
+                    React.createElement("div", { style: voucherStyle, className: "shadow-xl" },
+                        React.createElement("div", { className: "flex justify-between items-start border-b pb-3 mb-6" },
+                            React.createElement("h3", { className: "text-2xl font-bold text-green-700" }, "COMPROBANTE DE PERMISO"),
+                            /* FOLIO SOLICITADO */
+                            React.createElement("div", { className: "text-right flex-shrink-0" },
+                                React.createElement("p", { style: { fontFamily: 'Calibri, sans-serif', fontSize: '18px', color: '#10b981', fontWeight: 'bold' }, className: "mb-2" },
+                                    "FOLIO: ",
+                                    folio
+                                ),
+                                React.createElement("div", { className: "text-xs text-gray-600" },
+                                    React.createElement("p", null, "Fecha de Solicitud: ", new Date().toLocaleDateString('es-CL')),
+                                    React.createElement("p", null, "Hora: ", time)
+                                )
+                            )
+                        ),
+
+                        React.createElement("div", { className: "space-y-4 text-base" },
+                            React.createElement("p", { className: "font-semibold" }, "Información del Funcionario:"),
+                            React.createElement("p", { className: "text-xl font-extrabold text-gray-800 border-b-2 border-green-200 inline-block px-2 py-1" }, staffName),
+                            React.createElement("p", { className: "text-sm text-gray-600" }, "R.U.N.: ", staffRun, " | Cargo: ", staffRole),
+
+                            React.createElement("p", { className: "pt-4 text-sm" }, "Certifico que se autoriza la ausencia por el siguiente motivo y duración:"),
+                            
+                            React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4 bg-green-50/10 p-4 rounded-lg border" },
+                                React.createElement("div", null,
+                                    React.createElement("p", { className: "text-xs font-semibold text-gray-500" }, "Motivo (Tipo):"),
+                                    React.createElement("p", { className: "font-bold text-red-600" }, reasonLabel)
+                                ),
+                                React.createElement("div", null,
+                                    React.createElement("p", { className: "text-xs font-semibold text-gray-500" }, "Fecha del Permiso:"),
+                                    React.createElement("p", { className: "font-bold" }, dateFormatted)
+                                ),
+                                React.createElement("div", null,
+                                    React.createElement("p", { className: "text-xs font-semibold text-gray-500" }, "Permiso con Goce de Sueldo:"),
+                                    React.createElement("p", { className: `font-bold ${isPaid ? 'text-green-600' : 'text-red-700'}` }, isPaid ? 'SÍ' : 'NO')
+                                ),
+                                React.createElement("div", null,
+                                    React.createElement("p", { className: "text-xs font-semibold text-gray-500" }, "Presenta Comprobante:"),
+                                    React.createElement("p", { className: `font-bold ${presentsReceipt ? 'text-green-600' : 'text-yellow-700'}` }, presentsReceipt ? 'SÍ' : 'NO')
+                                ),
+                                
+                                staffRole === 'Profesor' && (
+                                    React.createElement("div", null,
+                                        React.createElement("p", { className: "text-xs font-semibold text-gray-500" }, "Deja Material Pedagógico:"),
+                                        React.createElement("p", { className: `font-bold ${leavesMaterial ? 'text-green-600' : 'text-red-700'}` }, leavesMaterial ? 'SÍ' : 'NO')
+                                    )
+                                ),
+                                
+                                React.createElement("div", { className: "col-span-2" },
+                                    React.createElement("p", { className: "text-xs font-semibold text-gray-500" }, "Duración Aprobada:"),
+                                    React.createElement("p", { className: "text-xl font-extrabold text-blue-700" }, durationLabel)
+                                )
+                            ),
+
+                            React.createElement("p", { className: "pt-4 italic text-sm" },
+                                "Detalles: ", details || "Sin detalles adicionales."
+                            )
+                        ),
+                        
+                        // =======================================================
+                        // NUEVA SECCIÓN DE RESUMEN DE AUSENCIAS (SOLICITADO)
+                        // =======================================================
+                        staffSummary && React.createElement("div", { className: "mt-10 pt-4 border-t border-gray-300" },
+                            React.createElement("h4", { className: "text-sm font-bold text-gray-700 mb-3" }, "RESUMEN ACUMULADO DE AUSENCIAS (A la fecha):"),
+                            React.createElement("div", { className: "grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg border" },
+                                React.createElement("div", null,
+                                    React.createElement("p", { className: "text-xs font-semibold text-gray-500" }, "Horas Totales Ausentes:"),
+                                    React.createElement("p", { className: "text-lg font-extrabold text-red-600" }, staffSummary.totalHours.toFixed(1), " hrs")
+                                ),
+                                React.createElement("div", null,
+                                    React.createElement("p", { className: "text-xs font-semibold text-gray-500" }, "Días No Trabajados (8h/día):"),
+                                    React.createElement("p", { className: "text-lg font-extrabold text-blue-700" }, staffSummary.daysNotWorked, " días")
+                                )
+                            )
+                        ),
+                        // =======================================================
+
+
+                        /* Área de Firmas - Restaurada */
+                        React.createElement("div", { className: "grid grid-cols-2 gap-12 mt-20 text-sm" },
+                            React.createElement("div", null,
+                                React.createElement("div", { className: "border-t border-gray-500 pt-2 mt-12 text-center font-semibold text-gray-900" }, "Firma del Funcionario"),
+                                React.createElement("p", { className: "text-xs text-center text-gray-600" }, "( ", staffName, " )")
+                            ),
+                            React.createElement("div", null,
+                                React.createElement("div", { className: "border-t border-gray-500 pt-2 mt-12 text-center font-semibold text-gray-900" }, "Firma del Representante Empresa"),
+                                React.createElement("p", { className: "text-xs text-center text-gray-600" }, "( ", COMPANY_REP_NAME, " - Dirección )")
+                            )
+                        ),
+                        
+                        /* PIE DE PÁGINA DEL VOUCHER */
+                        React.createElement("div", { className: "text-center text-xs text-gray-500 mt-6 pt-2 border-t" }, "Desarrollado por ProfeAle"),
+                        /* FIN PIE DE PÁGINA DEL VOUCHER */
+
+
+                        /* Botones de control (No imprimibles) */
+                        React.createElement("div", { className: "flex justify-center space-x-4 mt-12 no-print" },
+                            React.createElement("button", {
+                                onClick: () => window.print(),
+                                className: "px-6 py-2 bg-blue-600 text-white font-bold rounded-full hover:bg-blue-700 transition flex items-center shadow-lg"
+                            },
+                                React.createElement(Printer, { className: "w-5 h-5 mr-2" }),
+                                "Imprimir Comprobante"
+                            ),
+                            React.createElement("button", {
+                                onClick: onClose,
+                                className: "px-6 py-2 bg-gray-400 text-white font-bold rounded-full hover:bg-gray-500 transition flex items-center shadow-lg"
+                            },
+                                React.createElement(XCircle, { className: "w-5 h-5 mr-2" }),
+                                "Cerrar Vista"
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+
+        /**
+         * Componente principal de la aplicación de Control de Permisos.
+         */
+        const App = () => {
+            const [staffList, setStaffList] = useState([]); // Ahora cargado desde Firestore
+            const [permissions, setPermissions] = useState([]);
+            const [db, setDb] = useState(null);
+            const [auth, setAuth] = useState(null);
+            // const [userId, setUserId] = useState(null); // Eliminado para uso compartido
+            const [loading, setLoading] = useState(true);
+            const [loadingStaff, setLoadingStaff] = useState(true); // Nuevo estado de carga para personal
+            const [isAuthReady, setIsAuthReady] = useState(false);
+            const [activeTab, setActiveTab] = useState('register'); // 'register', 'summary', 'staff', 'manage'
+            const [voucherToPrint, setVoucherToPrint] = useState(null); 
+            const [voucherFolio, setVoucherFolio] = useState(null); 
+
+            // Formulario de Permiso
+            const [selectedStaffId, setSelectedStaffId] = useState(''); 
+            const [type, setType] = useState('day'); 
+            const [duration, setDuration] = useState(1); 
+            const [timeStart, setTimeStart] = useState('08:00'); // Hora de inicio
+            const [timeEnd, setTimeEnd] = useState('09:00'); // Hora de fin
+            const [reasonType, setReasonType] = useState('checkup'); 
+            const [presentsReceipt, setPresentsReceipt] = useState(true); 
+            const [leavesMaterial, setLeavesMaterial] = useState(true);
+            const [isPaid, setIsPaid] = useState(true); // Goce de Sueldo
+            const [details, setDetails] = useState('');
+            const [date, setDate] = useState(new Date().toISOString().substring(0, 10));
+            const [formMessage, setFormMessage] = useState({ text: '', type: '' }); 
+
+            // Filtros de Reporte
+            const [reportMonth, setReportMonth] = useState('');
+            const [reportStaffId, setReportStaffId] = useState('');
+
+            // Formulario de Gestión de Personal
+            const [newStaff, setNewStaff] = useState({
+                nombre: '',
+                run: '',
+                jornada: 44,
+                rol: '',
+                rolDetalle: '',
+            });
+            const [staffMessage, setStaffMessage] = useState({ text: '', type: '' }); 
+
+            // Obtener el rol del funcionario seleccionado para habilitar el campo
+            const selectedStaffRole = useMemo(() => {
+                const staff = staffList.find(s => s.id === selectedStaffId);
+                return staff ? staff.rol : '';
+            }, [selectedStaffId, staffList]);
+
+            // ====================================================================
+            // FIREBASE INITIALIZATION & AUTHENTICATION (SIMPLIFICADA)
+            // ====================================================================
+            useEffect(() => {
+                if (typeof window.firebase === 'undefined') {
+                    console.error("Firebase no está disponible. Fallo al cargar el script de CDN.");
+                    return;
+                }
+                
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    const firestoreDb = firebase.firestore(app); 
+                    const firebaseAuthInstance = firebase.auth(app); 
+                    
+                    setDb(firestoreDb);
+                    setAuth(firebaseAuthInstance);
+
+                    // Autenticación anónima para poder acceder a la BD, pero ignoramos el ID de usuario para la ruta de datos
+                    firebaseAuthInstance.signInAnonymously().then(() => {
+                        setIsAuthReady(true);
+                    }).catch((e) => {
+                        console.error("Error al intentar inicio de sesión anónimo (necesario para la conexión a Firestore):", e);
+                        setIsAuthReady(true); // Continuar con la app aunque la auth falle
+                    });
+
+                } catch (e) {
+                    console.error("Failed to initialize Firebase:", e);
+                }
+            }, []);
+
+            // ====================================================================
+            // DATA SUBSCRIPTION (Personal) - RUTA FIJA COMPARTIDA
+            // ====================================================================
+            useEffect(() => {
+                if (!db || !isAuthReady) return;
+
+                // **RUTA FIJA PARA DATOS COMPARTIDOS**
+                const staffCollectionRef = db.collection(`shared_data/staff_master/staff`);
+                const q = staffCollectionRef; 
+
+                const unsubscribe = q.onSnapshot(async (snapshot) => {
+                    const fetchedStaff = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                    }));
+                    
+                    // Si la colección está vacía, la poblamos con los datos iniciales
+                    if (fetchedStaff.length === 0 && seededStaff.length > 0) {
+                        const batch = db.batch();
+                        seededStaff.forEach(staff => {
+                            const docRef = staffCollectionRef.doc(staff.id); 
+                            batch.set(docRef, staff);
+                        });
+                        try {
+                            if (snapshot.size === 0) {
+                                await batch.commit();
+                                console.log("Nómina inicial poblada en Firestore compartido.");
+                            }
+                        } catch (error) {
+                            console.error("Error al poblar la nómina inicial:", error);
+                        }
+                    } else {
+                        setStaffList(fetchedStaff);
+                        setLoadingStaff(false);
+                        
+                        if (fetchedStaff.length > 0 && selectedStaffId === '') {
+                            setSelectedStaffId(fetchedStaff[0].id);
+                        } else if (fetchedStaff.length > 0 && !fetchedStaff.find(s => s.id === selectedStaffId)) {
+                            setSelectedStaffId(fetchedStaff[0].id);
+                        } else if (fetchedStaff.length === 0) {
+                            setSelectedStaffId('');
+                        }
+                    }
+                }, (error) => {
+                    console.error("Error subscribing to staff:", error);
+                    setLoadingStaff(false);
+                });
+
+                return () => unsubscribe();
+            }, [db, isAuthReady, selectedStaffId]); // Dependencias
+
+            // ====================================================================
+            // DATA SUBSCRIPTION (Permisos) - RUTA FIJA COMPARTIDA
+            // ====================================================================
+            useEffect(() => {
+                if (!db || !isAuthReady) return;
+
+                // **RUTA FIJA PARA DATOS COMPARTIDOS**
+                const permissionsCollectionRef = db.collection(`permissions_master/permisos_globales/permissions`);
+                const q = permissionsCollectionRef; 
+                
+                const unsubscribe = q.onSnapshot((snapshot) => {
+                    const fetchedPermissions = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                        date: doc.data().date || '', 
+                    }));
+                    
+                    // Ordenamos localmente
+                    fetchedPermissions.sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.timestamp - a.timestamp);
+                    
+                    setPermissions(fetchedPermissions);
+                    setLoading(false);
+                }, (error) => {
+                    console.error("Error subscribing to permissions:", error);
+                    setLoading(false);
+                });
+
+                return () => unsubscribe();
+            }, [db, isAuthReady]);
+
+            // ====================================================================
+            // CALCULATIONS & MEMOIZATION
+            // ====================================================================
+
+            /**
+             * Calcula el Folio Anual (N° de permiso en el año) del comprobante.
+             */
+            const getYearlyFolio = (permissionId, permissionDate) => {
+                if (!permissionDate || !permissions.length) return 'N/A';
+                
+                const targetYear = new Date(permissionDate).getFullYear();
+                
+                // 1. Filtrar los permisos que pertenecen al mismo año que el permiso objetivo
+                const yearlyPermissions = permissions.filter(p => 
+                    new Date(p.date).getFullYear() === targetYear
+                );
+                
+                // 2. Ordenar por fecha y luego por timestamp (para mantener un orden determinista)
+                yearlyPermissions.sort((a, b) => 
+                    (a.date || '').localeCompare(b.date || '') || a.timestamp - b.timestamp
+                );
+                
+                // 3. Encontrar el índice del permiso objetivo (+1 para que empiece en 1)
+                const index = yearlyPermissions.findIndex(p => p.id === permissionId);
+                
+                // Formato: N°_Secuencial/Año
+                return index !== -1 ? `${index + 1}/${targetYear}` : `N/A/${targetYear}`;
+            };
+
+
+            /**
+             * Calcula las horas acumuladas totales (para el voucher).
+             */
+            const getStaffAccumulatedHours = (staffId) => {
+                const totalHours = permissions
+                    .filter(p => p.staffId === staffId)
+                    .reduce((sum, p) => sum + calculateHours(p.type, p.duration, p.timeStart, p.timeEnd), 0);
+                
+                return {
+                    totalHours: totalHours,
+                    daysNotWorked: (totalHours / JORNADA_DIARIA_HORAS).toFixed(2)
+                };
+            };
+
+
+            /**
+             * Calcula el resumen de horas por persona, el gráfico y el reporte detallado.
+             */
+            const summary = useMemo(() => {
+                // --- 1. Cálculos de Resumen General ---
+                const staffMap = staffList.reduce((acc, staff) => {
+                    acc[staff.id] = {
+                        ...staff,
+                        totalHours: 0,
+                        medicalHours: 0,
+                        otherHours: 0,
+                        count: 0
+                    };
+                    return acc;
+                }, {});
+
+                let totalHoursSum = 0;
+                let medicalHoursSum = 0;
+
+                let reportData = permissions.filter(p => {
+                    const permissionDate = new Date(p.date);
+                    const permissionMonth = permissionDate.getFullYear() + '-' + String(permissionDate.getMonth() + 1).padStart(2, '0');
+                    
+                    const matchesMonth = reportMonth ? permissionMonth === reportMonth : true;
+                    const matchesStaff = reportStaffId ? p.staffId === reportStaffId : true;
+                    
+                    return matchesMonth && matchesStaff;
+                }).map(p => {
+                    const hours = calculateHours(p.type, p.duration, p.timeStart, p.timeEnd);
+                    p.calculatedHours = hours;
+                    return p;
+                });
+                
+                reportData.forEach(p => {
+                    const hours = p.calculatedHours;
+                    totalHoursSum += hours;
+                    
+                    if (staffMap[p.staffId]) {
+                        staffMap[p.staffId].totalHours += hours;
+                        staffMap[p.staffId].count += 1;
+                        if (p.reasonType === 'checkup') {
+                            staffMap[p.staffId].medicalHours += hours;
+                            medicalHoursSum += hours;
+                        } else {
+                            staffMap[p.staffId].otherHours += hours;
+                        }
+                    }
+                });
+
+                // Cálculo para el gráfico (agrupado por rol)
+                const roleSummaryMap = staffList.reduce((acc, staff) => {
+                    // Agrupar por el rol principal (Ej: Profesor, Auxiliar de Aseo, etc.)
+                    acc[staff.rol] = { rol: staff.rol, totalHours: 0 };
+                    return acc;
+                }, {});
+
+                permissions.forEach(p => {
+                    const staff = staffList.find(s => s.id === p.staffId);
+                    const role = staff ? staff.rol : 'Sin Rol';
+                    const hours = calculateHours(p.type, p.duration, p.timeStart, p.timeEnd);
+                    
+                    if (roleSummaryMap[role]) {
+                        roleSummaryMap[role].totalHours += hours;
+                    }
+                });
+                
+                // Usar el rol como nombre, y sumar totales por rol
+                const chartDataMap = {};
+                Object.values(roleSummaryMap).forEach(item => {
+                    const roleName = item.rol || 'Sin Rol';
+                    if (!chartDataMap[roleName]) {
+                        chartDataMap[roleName] = { rol: roleName, totalHours: 0 };
+                    }
+                    chartDataMap[roleName].totalHours += item.totalHours;
+                });
+                
+                const chartData = Object.values(chartDataMap).filter(d => d.totalHours > 0).sort((a, b) => b.totalHours - a.totalHours);
+
+
+                // Generar lista única de meses para el filtro
+                const availableMonths = [...new Set(permissions.map(p => {
+                    const date = new Date(p.date);
+                    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+                }))].sort().reverse();
+                
+                const reportTotalHours = reportData.reduce((sum, p) => sum + p.calculatedHours, 0);
+
+                return {
+                    tableData: Object.values(staffMap).map(item => ({
+                        ...item,
+                        daysNotWorked: (item.totalHours / JORNADA_DIARIA_HORAS).toFixed(2)
+                    })).sort((a, b) => b.totalHours - a.totalHours),
+                    chartData: chartData,
+                    totalHoursSum,
+                    medicalHoursSum,
+                    availableMonths,
+                    reportData,
+                    reportTotalHours,
+                    reportTotalDays: (reportTotalHours / JORNADA_DIARIA_HORAS).toFixed(2)
+                };
+            }, [permissions, staffList, reportMonth, reportStaffId]); // Depende de los filtros
+
+            // ====================================================================
+            // HANDLERS (CRUD Permisos)
+            // ====================================================================
+
+            const handleAddPermission = async (e) => {
+                e.preventDefault();
+                setFormMessage({ text: 'Registrando permiso...', type: 'pending' });
+
+                if (!db || !selectedStaffId || !date) {
+                    setFormMessage({ text: 'Error: Faltan campos obligatorios (Personal o Fecha).', type: 'error' });
+                    return;
+                }
+                
+                // Validar campos de rango de tiempo si es necesario
+                if (type === 'time-range' && (!timeStart || !timeEnd)) {
+                    setFormMessage({ text: 'Error: Los campos "Desde" y "Hasta" son obligatorios para el rango horario.', type: 'error' });
+                    return;
+                }
+
+
+                const staffMember = staffList.find(s => s.id === selectedStaffId);
+                const hours = calculateHours(type, duration, timeStart, timeEnd);
+
+                const newPermission = {
+                    staffId: selectedStaffId,
+                    staffName: staffMember ? staffMember.nombre : 'Desconocido',
+                    type: type, 
+                    duration: type === 'hours' ? parseFloat(duration) : null,
+                    timeStart: type === 'time-range' ? timeStart : null,
+                    timeEnd: type === 'time-range' ? timeEnd : null,
+                    hours: hours, // Valor calculado
+                    reasonType: reasonType, 
+                    presentsReceipt: reasonType === 'checkup' ? presentsReceipt : false,
+                    leavesMaterial: selectedStaffRole === 'Profesor' ? leavesMaterial : false,
+                    isPaid: isPaid, // Goce de sueldo
+                    details: details,
+                    date: date,
+                    timestamp: Date.now(),
+                };
+
+                try {
+                    // MODIFICACIÓN DE RUTA PARA DATOS COMPARTIDOS
+                    await db.collection(`permissions_master/permisos_globales/permissions`).add(newPermission);
+                    setFormMessage({ text: '✅ Permiso registrado con éxito.', type: 'success' });
+                    
+                    setSelectedStaffId(staffList.length > 0 ? staffList[0].id : '');
+                    setDuration(1);
+                    setTimeStart('08:00');
+                    setTimeEnd('09:00');
+                    setReasonType('checkup'); 
+                    setPresentsReceipt(true); 
+                    setLeavesMaterial(true); 
+                    setIsPaid(true); // Resetear goce de sueldo a SÍ
+                    setDetails('');
+                } catch (e) {
+                    console.error("Error al añadir documento: ", e);
+                    setFormMessage({ text: '❌ Error al registrar el permiso. Verifique la conexión.', type: 'error' });
+                }
+            };
+
+            const handleDeletePermission = async (id) => {
+                if (!db || !window.confirm('¿Está seguro de que desea eliminar este permiso?')) return;
+
+                try {
+                    // MODIFICACIÓN DE RUTA PARA DATOS COMPARTIDOS
+                    await db.collection(`permissions_master/permisos_globales/permissions`).doc(id).delete();
+                    setFormMessage({ text: 'Permiso eliminado.', type: 'success' });
+                } catch (e) {
+                    console.error("Error al eliminar documento: ", e);
+                    setFormMessage({ text: 'Error al eliminar el permiso.', type: 'error' });
+                }
+            };
+
+            // ====================================================================
+            // HANDLERS (CRUD Personal)
+            // ====================================================================
+            const handleStaffInputChange = (e) => {
+                const { name, value } = e.target;
+                
+                setNewStaff(prev => {
+                    const updated = { ...prev, [name]: value };
+                    
+                    // Si el rol cambia, limpiar el detalle
+                    if (name === 'rol' && value !== 'Otro') {
+                        updated.rolDetalle = '';
+                    }
+                    return updated;
+                });
+            };
+
+            const handleAddStaff = async (e) => {
+                e.preventDefault();
+                setStaffMessage({ text: 'Guardando funcionario...', type: 'pending' });
+
+                const { nombre, run, jornada, rol, rolDetalle } = newStaff;
+
+                // Validación adicional para el campo 'Otro'
+                if (rol === 'Otro' && !rolDetalle.trim()) {
+                    setStaffMessage({ text: '❌ Error: Debe especificar el detalle de la función "Otro".', type: 'error' });
+                    return;
+                }
+
+                if (!nombre || !run || !rol || !jornada) {
+                    setStaffMessage({ text: '❌ Error: Complete todos los campos.', type: 'error' });
+                    return;
+                }
+                
+                // Determinar el rol final
+                const finalRol = rol === 'Otro' ? rolDetalle.trim() : rol.trim();
+
+                const staffData = {
+                    nombre: nombre.trim(),
+                    run: run.trim().toUpperCase(),
+                    jornada: parseInt(jornada),
+                    rol: finalRol, // Guarda el detalle si es 'Otro'
+                };
+
+                try {
+                    // MODIFICACIÓN DE RUTA PARA DATOS COMPARTIDOS
+                    await db.collection(`shared_data/staff_master/staff`).doc(run.trim().toUpperCase()).set(staffData);
+                    setStaffMessage({ text: `✅ Funcionario ${nombre} (${finalRol}) añadido.`, type: 'success' });
+                    setNewStaff({ nombre: '', run: '', jornada: 44, rol: '', rolDetalle: '' });
+                } catch (e) {
+                    console.error("Error al añadir funcionario: ", e);
+                    setStaffMessage({ text: '❌ Error al añadir el funcionario. Verifique el RUN.', type: 'error' });
+                }
+            };
+
+            const handleDeleteStaff = async (id, name) => {
+                if (!db || !window.confirm(`¿Está seguro de eliminar a ${name}? Esto no afectará los permisos ya registrados.`)) return;
+
+                try {
+                    // MODIFICACIÓN DE RUTA PARA DATOS COMPARTIDOS
+                    await db.collection(`shared_data/staff_master/staff`).doc(id).delete();
+                    setStaffMessage({ text: `✅ Funcionario ${name} eliminado.`, type: 'success' });
+                } catch (e) {
+                    console.error("Error al eliminar funcionario: ", e);
+                    setStaffMessage({ text: '❌ Error al eliminar el funcionario.', type: 'error' });
+                }
+            };
+
+
+            // ====================================================================
+            // RENDER UTILITIES
+            // ====================================================================
+            
+            const getReasonLabel = (reasonType) => {
+                if (reasonType === 'checkup') return React.createElement("span", { className: "text-red-600 font-semibold flex items-center" }, React.createElement(Shield, { className: "w-4 h-4 mr-1" }), " Control Médico");
+                return React.createElement("span", { className: "text-blue-600 font-semibold flex items-center" }, React.createElement(Zap, { className: "w-4 h-4 mr-1" }), " Otro Motivo");
+            };
+
+            const getMessageStyle = (type) => {
+                if (type === 'success') return "bg-green-100 text-green-700 border-green-500";
+                if (type === 'error') return "bg-red-100 text-red-700 border-red-500";
+                if (type === 'pending') return "bg-yellow-100 text-yellow-700 border-yellow-500";
+                return "hidden";
+            };
+
+            const tabClasses = (tabName) => 
+                `tab-button px-4 py-2 font-semibold text-sm rounded-t-lg transition duration-150 ${
+                    activeTab === tabName 
+                        ? 'active bg-green-700 text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`;
+
+            // Función para formatear YYYY-MM a "Mes Año"
+            const formatMonthYear = (monthYear) => {
+                if (!monthYear) return "Todo el Historial";
+                const [year, month] = monthYear.split('-');
+                const date = new Date(year, month - 1);
+                return date.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+            };
+
+            // Main App Render (Pre-compilado)
+            return (
+                React.createElement(React.Fragment, null,
+                    /* Renderizado Condicional del Voucher (Se muestra sobre la app) */
+                    voucherToPrint && (
+                        React.createElement(VoucherPrintView, {
+                            permission: voucherToPrint,
+                            staffList: staffList,
+                            folio: voucherFolio,
+                            staffSummary: getStaffAccumulatedHours(voucherToPrint.staffId), // Pasa el resumen
+                            onClose: () => {
+                                setVoucherToPrint(null);
+                                setVoucherFolio(null); // Limpiar folio al cerrar
+                            }
+                        })
+                    ),
+                    
+                    /* Contenedor principal de la aplicación */
+                    React.createElement("div", { className: `max-w-6xl mx-auto p-4 md:p-8 bg-gray-50 min-h-screen ${voucherToPrint ? 'print:hidden hidden' : ''}` },
+                        React.createElement("h1", { className: "text-3xl font-extrabold text-green-800 mb-2 flex items-center" },
+                            React.createElement(Calendar, { className: "w-8 h-8 mr-2" }),
+                            " Control de Permisos de Personal"
+                        ),
+                        React.createElement("p", { className: "text-sm text-gray-600 mb-6 border-b pb-3 flex justify-between items-center" },
+                            React.createElement("span", null, "Gestión Escolar | Desarrollado por ProfeAle"),
+                            React.createElement("span", { className: "text-xs text-gray-400" }, "Modo Compartido: ACTIVO")
+                        ),
+
+                        /* Pestañas de Navegación */
+                        React.createElement("div", { className: "flex space-x-2 border-b-2 border-green-700 mb-6" },
+                            React.createElement("button", { 
+                                onClick: () => setActiveTab('register'), 
+                                className: tabClasses('register')
+                            }, React.createElement(PlusCircle, { className: "w-4 h-4 inline mr-1" }), " Registrar Permiso"),
+                            React.createElement("button", { 
+                                onClick: () => setActiveTab('summary'), 
+                                className: tabClasses('summary')
+                            }, React.createElement(TrendingUp, { className: "w-4 h-4 inline mr-1" }), " Resumen y Control Numérico"),
+                            React.createElement("button", { 
+                                onClick: () => setActiveTab('manage'), 
+                                className: tabClasses('manage')
+                            }, React.createElement(User, { className: "w-4 h-4 inline mr-1" }), " Gestión de Personal")
+                        ),
+
+                        /* Contenido de Pestañas */
+                        
+                        /* Pestaña: Registrar Permiso */
+                        activeTab === 'register' && (
+                            React.createElement("div", { className: "bg-white p-6 rounded-xl shadow-lg" },
+                                React.createElement("h2", { className: "text-xl font-bold text-gray-800 mb-4" }, "Ingreso de Nuevo Permiso"),
+                                React.createElement("form", { onSubmit: handleAddPermission, className: "space-y-4" },
+                                    
+                                    /* Fila 1: Personal y Fecha */
+                                    React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4" },
+                                        React.createElement("div", null,
+                                            React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Personal"),
+                                            React.createElement("select", {
+                                                value: selectedStaffId,
+                                                onChange: (e) => setSelectedStaffId(e.target.value),
+                                                className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition",
+                                                required: true
+                                            },
+                                                React.createElement("option", { value: "", disabled: staffList.length > 0 }, "-- ", loadingStaff ? 'Cargando personal...' : (staffList.length === 0 ? 'No hay personal registrado' : 'Seleccione un docente/asistente'), " --"),
+                                                staffList.map(staff => (
+                                                    React.createElement("option", { key: staff.id, value: staff.id },
+                                                        staff.nombre, " (", staff.rol, ")"
+                                                    )
+                                                ))
+                                            )
+                                        ),
+                                        React.createElement("div", null,
+                                            React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Fecha de Permiso"),
+                                            React.createElement("input", {
+                                                type: "date",
+                                                value: date,
+                                                onChange: (e) => setDate(e.target.value),
+                                                className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition",
+                                                required: true
+                                            })
+                                        )
+                                    ),
+
+                                    /* Fila 2: Tipo de Duración */
+                                    React.createElement("div", { className: "grid grid-cols-2 md:grid-cols-4 gap-4" },
+                                        React.createElement("div", { className: "col-span-2" },
+                                            React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Duración del Permiso"),
+                                            React.createElement("select", {
+                                                value: type,
+                                                onChange: (e) => {
+                                                    setType(e.target.value);
+                                                    setDuration(1);
+                                                    setTimeStart('08:00');
+                                                    setTimeEnd('09:00');
+                                                },
+                                                className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition"
+                                            },
+                                                React.createElement("option", { value: "day" }, "Día Completo (", JORNADA_DIARIA_HORAS, " hrs)"),
+                                                React.createElement("option", { value: "half-day" }, "Medio Día (", JORNADA_DIARIA_HORAS / 2, " hrs)"),
+                                                React.createElement("option", { value: "hours" }, "Por Horas (Cantidad Manual)"),
+                                                React.createElement("option", { value: "time-range" }, "Por Horas (Rango Horario)")
+                                            )
+                                        ),
+
+                                        /* Campo: N° Horas (Manual) */
+                                        type === 'hours' && (
+                                            React.createElement("div", null,
+                                                React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "N° Horas (Manual)"),
+                                                React.createElement("input", {
+                                                    type: "number",
+                                                    step: "0.5",
+                                                    min: "0.5",
+                                                    max: JORNADA_DIARIA_HORAS,
+                                                    value: duration,
+                                                    onChange: (e) => setDuration(e.target.value),
+                                                    className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition",
+                                                    required: true
+                                                })
+                                            )
+                                        ),
+
+                                        /* Campos: Rango Horario (Reloj) */
+                                        type === 'time-range' && (
+                                            React.createElement(React.Fragment, null,
+                                                React.createElement("div", null,
+                                                    React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Desde (Hora inicio)"),
+                                                    React.createElement("input", {
+                                                        type: "time",
+                                                        value: timeStart,
+                                                        onChange: (e) => setTimeStart(e.target.value),
+                                                        className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition",
+                                                        required: true
+                                                    })
+                                                ),
+                                                React.createElement("div", null,
+                                                    React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Hasta (Hora fin)"),
+                                                    React.createElement("input", {
+                                                        type: "time",
+                                                        value: timeEnd,
+                                                        onChange: (e) => setTimeEnd(e.target.value),
+                                                        className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition",
+                                                        required: true
+                                                    })
+                                                )
+                                            )
+                                        ),
+                                        
+                                        /* Motivo Principal */
+                                        React.createElement("div", { className: `${(type === 'hours' || type === 'time-range') ? 'col-span-1' : 'col-span-2'}` },
+                                            React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Motivo Principal"),
+                                            React.createElement("select", {
+                                                value: reasonType,
+                                                onChange: (e) => {
+                                                    setReasonType(e.target.value);
+                                                    if (e.target.value !== 'checkup') setPresentsReceipt(false); 
+                                                },
+                                                className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition"
+                                            },
+                                                React.createElement("option", { value: "checkup" }, "Control Médico"),
+                                                React.createElement("option", { value: "other" }, "Otro Motivo")
+                                            )
+                                        ),
+
+                                        /* Campo: Presenta Comprobante (SOLO si es Control Médico) */
+                                        reasonType === 'checkup' && (
+                                            React.createElement("div", null,
+                                                React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Presenta Comprobante"),
+                                                React.createElement("select", {
+                                                    value: presentsReceipt,
+                                                    onChange: (e) => setPresentsReceipt(e.target.value === 'true'),
+                                                    className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition"
+                                                },
+                                                    React.createElement("option", { value: "true" }, "Sí"),
+                                                    React.createElement("option", { value: "false" }, "No")
+                                                )
+                                            )
+                                        )
+                                    ),
+                                    
+                                    /* Fila 3: Goce de Sueldo y Material Pedagógico (Ocupan la línea completa) */
+                                    React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4 col-span-full pt-2 border-t border-gray-200" },
+                                        /* Goce de Sueldo */
+                                        React.createElement("div", null,
+                                            React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Permiso con Goce de Sueldo"),
+                                            React.createElement("select", {
+                                                value: isPaid,
+                                                onChange: (e) => setIsPaid(e.target.value === 'true'),
+                                                className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition"
+                                            },
+                                                React.createElement("option", { value: "true" }, "Sí"),
+                                                React.createElement("option", { value: "false" }, "No")
+                                            )
+                                        ),
+
+                                        /* Material Pedagógico (SOLO si es Profesor) */
+                                        selectedStaffRole === 'Profesor' && (
+                                            React.createElement("div", null,
+                                                React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "¿Deja material pedagógico?"),
+                                                React.createElement("select", {
+                                                    value: leavesMaterial,
+                                                    onChange: (e) => setLeavesMaterial(e.target.value === 'true'),
+                                                    className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition"
+                                                },
+                                                    React.createElement("option", { value: "true" }, "Sí, deja material"),
+                                                    React.createElement("option", { value: "false" }, "No, queda pendiente")
+                                                )
+                                            )
+                                        )
+                                    ),
+                                    /* Fin Fila 3 */
+
+
+                                    /* Fila 4: Detalles Adicionales */
+                                    React.createElement("div", null,
+                                        React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Detalles Adicionales"),
+                                        React.createElement("input", {
+                                            type: "text",
+                                            value: details,
+                                            onChange: (e) => setDetails(e.target.value),
+                                            placeholder: "Ej: Control médico o Asunto personal",
+                                            className: "w-full p-3 border rounded-lg bg-gray-50 focus:border-green-500 transition"
+                                        })
+                                    ),
+
+                                    /* Mensajes de Formulario */
+                                    formMessage.text && (
+                                        React.createElement("div", { className: `p-3 border-l-4 rounded-md ${getMessageStyle(formMessage.type)}` }, formMessage.text)
+                                    ),
+
+                                    React.createElement("button", {
+                                        type: "submit",
+                                        className: "w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition duration-200 shadow-md flex items-center justify-center disabled:opacity-50",
+                                        disabled: !selectedStaffId || !date || formMessage.type === 'pending' || staffList.length === 0
+                                    },
+                                        React.createElement(PlusCircle, { className: "w-5 h-5 mr-1" }),
+                                        formMessage.type === 'pending' ? 'Guardando...' : 'Guardar Permiso'
+                                    ),
+                                    staffList.length === 0 && (
+                                        React.createElement("p", { className: "text-red-500 text-center mt-2" }, "Por favor, añada funcionarios en la pestaña \"Gestión de Personal\" antes de registrar permisos.")
+                                    )
+                                )
+                            )
+                        ),
+
+                        /* Pestaña: Resumen y Control Numérico */
+                        activeTab === 'summary' && (
+                            React.createElement("div", { className: "space-y-6" },
+                                React.createElement("h2", { className: "text-xl font-bold text-gray-800 mb-4" }, "Resumen de Horas Acumuladas (Equivalencia: ", JORNADA_DIARIA_HORAS, "h = 1 día)"),
+                                
+                                loading || loadingStaff ? (
+                                    React.createElement("div", { className: "text-center p-10 text-gray-500 flex justify-center items-center" },
+                                        React.createElement(RefreshCcw, { className: "w-5 h-5 animate-spin mr-2" }),
+                                        " Cargando datos de la nómina y permisos..."
+                                    )
+                                ) : (
+                                    React.createElement(React.Fragment, null,
+                                        /* Tarjetas de Resumen Global */
+                                        React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-6" },
+                                            React.createElement("div", { className: "bg-white p-4 rounded-xl shadow-lg border-l-4 border-green-500" },
+                                                React.createElement("p", { className: "text-sm font-medium text-gray-500" }, "Total de Permisos Registrados"),
+                                                React.createElement("p", { className: "text-3xl font-extrabold text-gray-900" }, permissions.length)
+                                            ),
+                                            React.createElement("div", { className: "bg-white p-4 rounded-xl shadow-lg border-l-4 border-red-500" },
+                                                React.createElement("p", { className: "text-sm font-medium text-gray-500" }, "Horas Totales (Control Médico)"),
+                                                React.createElement("p", { className: "text-3xl font-extrabold text-red-700" },
+                                                    summary.medicalHoursSum.toFixed(1), " hrs"
+                                                )
+                                            ),
+                                            React.createElement("div", { className: "bg-white p-4 rounded-xl shadow-lg border-l-4 border-blue-500" },
+                                                React.createElement("p", { className: "text-sm font-medium text-gray-500" }, "Días Totales No Trabajados"),
+                                                React.createElement("p", { className: "text-3xl font-extrabold text-blue-700" },
+                                                    (summary.totalHoursSum / JORNADA_DIARIA_HORAS).toFixed(2), " días"
+                                                )
+                                            )
+                                        ),
+                                        
+                                        /* Gráfico de Ausencias por Función (SOLICITADO) */
+                                        React.createElement("div", { className: "bg-white p-6 rounded-xl shadow-lg" },
+                                            React.createElement("h3", { className: "text-lg font-semibold mb-4 text-gray-700 flex items-center" },
+                                                "Gráfico de Horas de Permiso por Función (Total: ", summary.totalHoursSum.toFixed(1), " hrs)"
+                                            ),
+                                            summary.chartData.length > 0 && BarChart && (
+                                                React.createElement("div", { style: { width: '100%', height: 300 } },
+                                                    React.createElement(ResponsiveContainer, { width: "100%", height: "100%" },
+                                                        React.createElement(BarChart, { 
+                                                            data: summary.chartData, 
+                                                            margin: { top: 5, right: 20, left: 10, bottom: 5 }
+                                                        },
+                                                            React.createElement(CartesianGrid, { strokeDasharray: "3 3" }),
+                                                            React.createElement(XAxis, { dataKey: "rol", stroke: "#6b7280" }),
+                                                            React.createElement(YAxis, { stroke: "#6b7280" }),
+                                                            React.createElement(Tooltip, { 
+                                                                formatter: (value) => [`${value.toFixed(1)} horas`, 'Total de Ausencia'], 
+                                                                labelFormatter: (label) => `Función: ${label}`
+                                                            }),
+                                                            React.createElement(Legend, null),
+                                                            React.createElement(Bar, { dataKey: "totalHours", name: "Horas de Ausencia", fill: "#10b981", radius: [4, 4, 0, 0] })
+                                                        )
+                                                    )
+                                                )
+                                            ),
+                                            (!BarChart || summary.chartData.length === 0) && (
+                                                React.createElement("p", { className: "text-gray-500 italic text-center p-4" }, "No hay datos de permisos para generar el gráfico o el módulo de gráficos no está disponible. Revise la consola (F12).")
+                                            )
+                                        ),
+                                        
+                                        /* Sección de Reporte Detallado */
+                                        React.createElement("div", { className: "bg-white p-6 rounded-xl shadow-lg" },
+                                            React.createElement("h3", { className: "text-lg font-semibold mb-4 text-gray-700 flex items-center border-b pb-2" },
+                                                React.createElement(Printer, { className: "w-5 h-5 mr-2" }),
+                                                " Generar Reporte Detallado"
+                                            ),
+
+                                            React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-end" },
+                                                /* Filtro por Mes */
+                                                React.createElement("div", null,
+                                                    React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Filtrar por Mes"),
+                                                    React.createElement("select", {
+                                                        value: reportMonth,
+                                                        onChange: (e) => setReportMonth(e.target.value),
+                                                        className: "w-full p-2 border rounded-lg bg-white"
+                                                    },
+                                                        React.createElement("option", { value: "" }, "Todo el Historial"),
+                                                        summary.availableMonths.map(month => (
+                                                            React.createElement("option", { key: month, value: month }, formatMonthYear(month))
+                                                        ))
+                                                    )
+                                                ),
+
+                                                /* Filtro por Docente */
+                                                React.createElement("div", { className: "md:col-span-2" },
+                                                    React.createElement("label", { className: "block text-sm font-medium text-gray-700 mb-1" }, "Filtrar por Funcionario"),
+                                                    React.createElement("select", {
+                                                        value: reportStaffId,
+                                                        onChange: (e) => setReportStaffId(e.target.value),
+                                                        className: "w-full p-2 border rounded-lg bg-white"
+                                                    },
+                                                        React.createElement("option", { value: "" }, "Todos los Funcionarios"),
+                                                        staffList.map(staff => (
+                                                            React.createElement("option", { key: staff.id, value: staff.id }, staff.nombre, " (", staff.rol, ")")
+                                                        ))
+                                                    )
+                                                ),
+                                                
+                                                /* Botón de Impresión del Reporte */
+                                                React.createElement("div", null,
+                                                    React.createElement("button", { 
+                                                        onClick: () => window.print(),
+                                                        className: "w-full py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition disabled:opacity-50 no-print",
+                                                        disabled: summary.reportData.length === 0
+                                                    }, "Imprimir Listado")
+                                                )
+                                            ),
+
+                                            /* Tabla de Detalle del Reporte */
+                                            React.createElement("div", { className: "overflow-x-auto" },
+                                                summary.reportData.length > 0 ? (
+                                                    React.createElement("table", { id: "report-table", className: "min-w-full divide-y divide-gray-300 border" },
+                                                        React.createElement("thead", { className: "bg-gray-100" },
+                                                            React.createElement("tr", null,
+                                                                React.createElement("th", { className: "px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase" }, "Funcionario"),
+                                                                React.createElement("th", { className: "px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase" }, "Fecha"),
+                                                                React.createElement("th", { className: "px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase" }, "Duración"),
+                                                                React.createElement("th", { className: "px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase" }, "Motivo"),
+                                                                React.createElement("th", { className: "px-3 py-2 text-right text-xs font-bold text-gray-600 uppercase" }, "Horas Ausentes")
+                                                            )
+                                                        ),
+                                                        React.createElement("tbody", { className: "bg-white divide-y divide-gray-200 text-sm" },
+                                                            summary.reportData.map((p) => (
+                                                                React.createElement("tr", { key: p.id },
+                                                                    React.createElement("td", { className: "px-3 py-2 whitespace-nowrap" }, p.staffName),
+                                                                    React.createElement("td", { className: "px-3 py-2 whitespace-nowrap" }, new Date(p.date).toLocaleDateString('es-CL')),
+                                                                    React.createElement("td", { className: "px-3 py-2 whitespace-nowrap" }, getPermissionLabel(p.type, p.duration || p.hours, p.hours, p.timeStart, p.timeEnd)),
+                                                                    React.createElement("td", { className: "px-3 py-2 whitespace-normal" }, p.details || getReasonLabel(p.reasonType)),
+                                                                    React.createElement("td", { className: "px-3 py-2 whitespace-nowrap text-right font-medium" }, p.calculatedHours.toFixed(2))
+                                                                )
+                                                            )),
+                                                            /* Fila de Totales */
+                                                            React.createElement("tr", { className: "bg-green-50 font-extrabold border-t-2 border-green-700" },
+                                                                React.createElement("td", { className: "px-3 py-2", colSpan: "4" }, "TOTAL HORAS AUSENTES / DÍAS NO TRABAJADOS (", JORNADA_DIARIA_HORAS, "H)"),
+                                                                React.createElement("td", { className: "px-3 py-2 text-right" },
+                                                                    summary.reportTotalHours.toFixed(2), " hrs / ", summary.reportTotalDays, " días"
+                                                                )
+                                                            )
+                                                        )
+                                                    )
+                                                ) : (
+                                                    React.createElement("p", { className: "text-gray-500 italic p-4 text-center border rounded-lg" }, "No se encontraron permisos para los filtros seleccionados.")
+                                                )
+                                            )
+                                        ),
+
+                                        /* Tabla de Resumen por Persona */
+                                        React.createElement("div", { className: "bg-white p-6 rounded-xl shadow-lg overflow-x-auto" },
+                                            React.createElement("h3", { className: "text-lg font-semibold mb-4 text-gray-700 flex items-center" },
+                                                React.createElement(User, { className: "w-5 h-5 mr-2" }), " Desglose por Personal"
+                                            ),
+                                            React.createElement("table", { className: "min-w-full divide-y divide-gray-200" },
+                                                React.createElement("thead", { className: "bg-gray-50" },
+                                                    React.createElement("tr", null,
+                                                        React.createElement("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Nombre"),
+                                                        React.createElement("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Rol"),
+                                                        React.createElement("th", { className: "px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Total Permisos (Count)"),
+                                                        React.createElement("th", { className: "px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Horas Control Médico (Red)"),
+                                                        React.createElement("th", { className: "px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Horas Otros (Blue)"),
+                                                        React.createElement("th", { className: "px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Horas Totales"),
+                                                        React.createElement("th", { className: "px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Días No Trabajados (", JORNADA_DIARIA_HORAS, "h/día)")
+                                                    )
+                                                ),
+                                                React.createElement("tbody", { className: "bg-white divide-y divide-gray-200" },
+                                                    summary.tableData.map((item) => (
+                                                        React.createElement("tr", { key: item.id, className: "hover:bg-gray-50" },
+                                                            React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" }, item.nombre),
+                                                            React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-500" }, item.rol),
+                                                            React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-gray-700" }, item.count),
+                                                            React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-right text-red-700" }, item.medicalHours.toFixed(1), " hrs"),
+                                                            React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700" }, item.otherHours.toFixed(1), " hrs"),
+                                                            React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-right font-extrabold text-green-700" }, item.totalHours.toFixed(1), " hrs"),
+                                                            React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-right font-extrabold text-green-800" }, item.daysNotWorked, " días")
+                                                        )
+                                                    ))
+                                                )
+                                            )
+                                        ),
+
+                                        /* Historial Detallado General (Botones de acción corregidos) */
+                                        React.createElement("div", { className: "bg-white p-6 rounded-xl shadow-lg" },
+                                            React.createElement("h3", { className: "text-lg font-semibold mb-4 text-gray-700 flex items-center" },
+                                                React.createElement(Clock, { className: "w-5 h-5 mr-2" }),
+                                                " Historial Completo de Permisos (Total: ", permissions.length, ")"
+                                            ),
+                                            permissions.length === 0 ? (
+                                                React.createElement("p", { className: "text-gray-500 italic" }, "No hay permisos registrados aún.")
+                                            ) : (
+                                                React.createElement("ul", { className: "divide-y divide-gray-100" },
+                                                    permissions.map(p => (
+                                                        React.createElement("li", { key: p.id, className: "py-3 flex justify-between items-center hover:bg-gray-50 px-2 rounded-lg" },
+                                                            React.createElement("div", { className: "flex-1 min-w-0" },
+                                                                React.createElement("p", { className: "text-sm font-semibold text-gray-900" }, p.staffName),
+                                                                React.createElement("p", { className: "text-xs text-gray-500" },
+                                                                    React.createElement(Calendar, { className: "w-3 h-3 inline mr-1" }),
+                                                                    " ", p.date
+                                                                ),
+                                                                p.details && (
+                                                                    React.createElement("p", { className: "text-xs text-gray-600 mt-1 flex items-center" },
+                                                                        React.createElement(AlertTriangle, { className: "w-3 h-3 inline mr-1 text-yellow-600" }),
+                                                                        " ", p.details
+                                                                    )
+                                                                )
+                                                            ),
+                                                            React.createElement("div", { className: "text-right flex items-center space-x-4" },
+                                                                getReasonLabel(p.reasonType),
+                                                                React.createElement("span", { className: `font-bold text-xs ${p.isPaid ? 'text-green-600' : 'text-red-700'}` },
+                                                                    p.isPaid ? 'Goce Sueldo: SÍ' : 'Goce Sueldo: NO'
+                                                                ),
+                                                                p.reasonType === 'checkup' && (
+                                                                    React.createElement("span", { className: `font-bold text-xs ${p.presentsReceipt ? 'text-green-600' : 'text-yellow-700'}` },
+                                                                        "Comprobante: ", p.presentsReceipt ? 'SÍ' : 'NO'
+                                                                    )
+                                                                ),
+                                                                p.leavesMaterial !== undefined && ( // Mostrar solo si el campo existe (es profesor)
+                                                                    React.createElement("span", { className: `font-bold text-xs w-24 ${p.leavesMaterial ? 'text-green-600' : 'text-red-700'}` },
+                                                                        "Material: ", p.leavesMaterial ? 'SÍ' : 'NO'
+                                                                    )
+                                                                ),
+                                                                React.createElement("span", { className: "font-bold text-sm text-gray-800 w-24 text-left" },
+                                                                    getPermissionLabel(p.type, p.duration || p.hours, p.hours, p.timeStart, p.timeEnd)
+                                                                ),
+                                                                /* BOTÓN IMPRIMIR VOUCHER (CORREGIDO) */
+                                                                React.createElement("button", {
+                                                                    onClick: () => {
+                                                                        const folioValue = getYearlyFolio(p.id, p.date);
+                                                                        setVoucherFolio(folioValue);
+                                                                        setVoucherToPrint(p);
+                                                                    },
+                                                                    className: "p-1 text-blue-600 hover:text-blue-800 transition",
+                                                                    title: "Generar Comprobante Imprimible"
+                                                                }, React.createElement(Printer, { className: "w-4 h-4" })),
+                                                                /* BOTÓN ELIMINAR (CORREGIDO) */
+                                                                React.createElement("button", {
+                                                                    onClick: () => handleDeletePermission(p.id),
+                                                                    className: "p-1 text-red-500 hover:text-red-700 transition",
+                                                                    title: "Eliminar Permiso"
+                                                                }, React.createElement(Trash2, { className: "w-4 h-4" }))
+                                                            )
+                                                        )
+                                                    ))
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        ),
+
+                        /* Pestaña: GESTIÓN DE PERSONAL (NUEVA) */
+                        activeTab === 'manage' && (
+                            React.createElement("div", { className: "space-y-6" },
+                                React.createElement("h2", { className: "text-xl font-bold text-gray-800 mb-4 flex items-center" },
+                                    React.createElement(User, { className: "w-5 h-5 mr-2" }), " Gestión de Nómina de Funcionarios"
+                                ),
+
+                                /* Contenedor de Formularios */
+                                React.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6" },
+                                    /* Formulario de Adición */
+                                    React.createElement("div", { className: "bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-500" },
+                                        React.createElement("h3", { className: "text-lg font-semibold text-gray-700 mb-4" }, "1. Ingresar Nuevo Funcionario"),
+                                        React.createElement("form", { onSubmit: handleAddStaff, className: "space-y-3" },
+                                            React.createElement("input", {
+                                                type: "text",
+                                                name: "run",
+                                                value: newStaff.run,
+                                                onChange: handleStaffInputChange,
+                                                placeholder: "R.U.N. (Ej: 12.345.678-9)",
+                                                className: "w-full p-2 border rounded-lg",
+                                                required: true
+                                            }),
+                                            React.createElement("input", {
+                                                type: "text",
+                                                name: "nombre",
+                                                value: newStaff.nombre,
+                                                onChange: handleStaffInputChange,
+                                                placeholder: "Nombre Completo",
+                                                className: "w-full p-2 border rounded-lg",
+                                                required: true
+                                            }),
+                                            React.createElement("select", {
+                                                name: "rol",
+                                                value: newStaff.rol,
+                                                onChange: handleStaffInputChange,
+                                                className: "w-full p-2 border rounded-lg",
+                                                required: true
+                                            },
+                                                React.createElement("option", { value: "", disabled: true }, "Seleccione Función"),
+                                                React.createElement("option", { value: "Profesor" }, "Profesor"),
+                                                React.createElement("option", { value: "Asistente" }, "Asistente de la Educación"),
+                                                React.createElement("option", { value: "Director" }, "Director/Administrativo"),
+                                                React.createElement("option", { value: "Otro" }, "Otro ¿Cuál?")
+                                            ),
+                                            
+                                            /* NUEVO CAMPO CONDICIONAL: Detalle de Rol */
+                                            newStaff.rol === 'Otro' && (
+                                                React.createElement("input", {
+                                                    type: "text",
+                                                    name: "rolDetalle",
+                                                    value: newStaff.rolDetalle,
+                                                    onChange: handleStaffInputChange,
+                                                    placeholder: "Detalle de Función (Ej: Auxiliar de Aseo)",
+                                                    className: "w-full p-2 border rounded-lg border-blue-400",
+                                                    required: true
+                                                })
+                                            ),
+                                            /* FIN CAMPO CONDICIONAL */
+
+                                            React.createElement("input", {
+                                                type: "number",
+                                                name: "jornada",
+                                                value: newStaff.jornada,
+                                                onChange: handleStaffInputChange,
+                                                placeholder: "Carga Horaria Semanal (Ej: 44)",
+                                                className: "w-full p-2 border rounded-lg",
+                                                min: "1",
+                                                required: true
+                                            }),
+
+                                            React.createElement("button", { type: "submit", className: "w-full py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition" }, "Añadir Funcionario"),
+                                            staffMessage.text && staffMessage.type !== 'pending' && (
+                                                React.createElement("div", { className: `p-2 border-l-4 rounded-md ${getMessageStyle(staffMessage.type)}` }, staffMessage.text)
+                                            )
+                                        )
+                                    ),
+
+                                    /* Formulario de Eliminación */
+                                    React.createElement("div", { className: "bg-white p-6 rounded-xl shadow-lg border-l-4 border-red-500" },
+                                        React.createElement("h3", { className: "text-lg font-semibold text-gray-700 mb-4" }, "2. Listado y Eliminación"),
+                                        
+                                        loadingStaff ? (
+                                            React.createElement("p", { className: "text-gray-500" }, "Cargando lista...")
+                                        ) : staffList.length === 0 ? (
+                                            React.createElement("p", { className: "text-red-500" }, "No hay funcionarios registrados.")
+                                        ) : (
+                                            React.createElement("ul", { className: "divide-y divide-gray-100 max-h-80 overflow-y-auto" },
+                                                staffList.map(staff => (
+                                                    React.createElement("li", { key: staff.id, className: "py-2 flex justify-between items-center text-sm" },
+                                                        React.createElement("div", null,
+                                                            React.createElement("p", { className: "font-semibold text-gray-800" }, staff.nombre),
+                                                            React.createElement("p", { className: "text-xs text-gray-500" }, staff.rol, " (", staff.run, ")")
+                                                        ),
+                                                        React.createElement("button", { 
+                                                            onClick: () => handleDeleteStaff(staff.id, staff.nombre),
+                                                            className: "p-1 text-red-500 hover:text-red-700 transition",
+                                                            title: "Eliminar"
+                                                        }, React.createElement(Trash2, { className: "w-4 h-4" }))
+                                                    )
+                                                ))
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        ),
+
+                        /* Pestaña: Listado de Personal (Ahora usa la lista persistente) */
+                        activeTab === 'staff' && (
+                            React.createElement("div", { className: "bg-white p-6 rounded-xl shadow-lg overflow-x-auto" },
+                                React.createElement("h2", { className: "text-xl font-bold text-gray-800 mb-4 flex items-center" },
+                                    React.createElement(User, { className: "w-5 h-5 mr-2" }), " Listado de Docentes y Asistentes"
+                                ),
+                                loadingStaff ? (
+                                    React.createElement("div", { className: "text-center p-10 text-gray-500 flex justify-center items-center" },
+                                        React.createElement(RefreshCcw, { className: "w-5 h-5 animate-spin mr-2" }), " Cargando lista de personal..."
+                                    )
+                                ) : staffList.length === 0 ? (
+                                    React.createElement("p", { className: "text-red-500" }, "No hay personal registrado en la base de datos. Vaya a 'Gestión de Personal' para añadir funcionarios.")
+                                ) : (
+                                    React.createElement("table", { className: "min-w-full divide-y divide-gray-200" },
+                                        React.createElement("thead", { className: "bg-gray-50" },
+                                            React.createElement("tr", null,
+                                                React.createElement("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" }, "R.U.N."),
+                                                React.createElement("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Nombre Completo"),
+                                                React.createElement("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Función"),
+                                                React.createElement("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" }, "Carga Semanal (Hrs)")
+                                            )
+                                        ),
+                                        React.createElement("tbody", { className: "bg-white divide-y divide-gray-200" },
+                                            staffList.map((staff) => (
+                                                React.createElement("tr", { key: staff.id, className: "hover:bg-gray-50" },
+                                                    React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-500" }, staff.run),
+                                                    React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" }, staff.nombre),
+                                                    React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-600" }, staff.rol),
+                                                    React.createElement("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-600" }, staff.jornada)
+                                                )
+                                            ))
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        // Inicia el rendering de la aplicación
+        window.addEventListener('load', () => {
+            try {
+                const rootElement = document.getElementById('root');
+                if (rootElement && typeof window.React !== 'undefined' && typeof window.ReactDOM !== 'undefined') {
+                    // Limpia el mensaje de carga si el montaje es exitoso
+                    rootElement.innerHTML = '';
+                    ReactDOM.createRoot(rootElement).render(
+                        React.createElement(React.StrictMode, null,
+                            React.createElement(App, null)
+                        )
+                    );
+                } else {
+                    console.error("Fallo de Montaje: React o ReactDOM no están definidos. Revise su conexión a Internet o el archivo HTML.");
+                    const fallbackElement = document.getElementById('root');
+                    if(fallbackElement) fallbackElement.innerHTML = `<div style="padding: 20px; color: red;">Error Fatal: No se pudo cargar React. Revise su conexión a Internet o el archivo HTML.</div>`;
+                }
+            } catch (e) {
+                console.error("Error fatal al renderizar la aplicación:", e);
+                document.getElementById('root').innerHTML = `<div style="padding: 20px; color: red;">Error Fatal de Renderizado. Consulte la consola (F12). Mensaje: ${e.message}</div>`;
+            }
+        });
+    </script>
+</body>
+</html>
