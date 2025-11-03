@@ -1,729 +1,696 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Control de Permisos</title>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @media print {
       .no-print { display: none !important; }
       body * { visibility: hidden !important; }
-      #voucher-print-area, #voucher-print-area *,
-      #report-print-area , #report-print-area * { visibility: visible !important; }
-      #voucher-print-area, #report-print-area {
-        display:block !important; position:absolute !important; inset:0 !important;
-        width:100% !important; background:#fff !important; z-index:9999 !important;
-      }
+      #voucher-print-area, #voucher-print-area * { visibility: visible !important; }
+      #voucher-print-area { position: absolute !important; inset: 0 !important; background: #fff !important; display:block !important; }
     }
   </style>
 </head>
 <body class="bg-gray-50">
-  <div id="root"><div class="p-6 text-center text-gray-600">Cargando aplicación...</div></div>
+  <div id="root"></div>
 
-  <!-- React -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- React (producción) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" defer></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" defer></script>
+  <!-- Firebase (compat producción) -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js" defer></script>
 
-  <!-- Firebase compat -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
-
-  <!-- Recharts (opcional) -->
-  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
-
-  <script>
-(() => {
-  const { useState, useEffect, useMemo, Fragment } = React;
-  const R = window.Recharts || {};
-  const { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } = R;
-
-  /* ============ CONFIG ============ */
-  const firebaseConfig = {
-    apiKey: "AIzaSyBnSMVCH0yyYUWk5z54kTIPTrWkyoeWs-I",
-    authDomain: "suspenciones-40d0c.firebaseapp.com",
-    projectId: "suspenciones-40d0c",
-    storageBucket: "suspenciones-40d0c.firebasestorage.app",
-    appId: "1:853418739042:web:d051befb99cd2acacdd4583b",
-    measurementId: "G-L00J7XN6Y1"
-  };
-  const CL_TZ = 'America/Santiago';
-  const JORNADA = 8;
-  const COMPANY_REP_NAME = "Miguel Díaz J.";
-
-  const DB_STAFF = `artifacts/${firebaseConfig.projectId}/staff`;
-  const DB_PERMS = `artifacts/${firebaseConfig.projectId}/permissions`;
-
-  let app, db, initErr=null;
-  try { app = firebase.initializeApp(firebaseConfig); db = firebase.firestore(); }
-  catch(e){ initErr = e?.message || String(e); }
-
-  /* ============ HELPERS ============ */
-  const cleanRun = (s) => (s || "").replace(/[.\-]/g, "").toUpperCase();
-  const todayLocal = () => new Date().toLocaleString('sv-SE', { timeZone: CL_TZ }).slice(0, 10);
-  const formatDateCL = (iso) => {
-    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "N/A";
-    const [y,m,d] = iso.split("-").map(Number);
-    const meses = ["enero","febrero","marzo","abril","mayo","junio","julio",
-                   "agosto","septiembre","octubre","noviembre","diciembre"];
-    return `${d} de ${meses[m-1]} de ${y}`;
-  };
-  const calcHours = (type, duration, t1, t2) => {
-    if (type === "hours") return Number(duration||0);
-    if (type === "half-day") return JORNADA/2;
-    if (type === "day") return JORNADA;
-    if (type === "time-range" && t1 && t2) {
-      const [h1,m1] = t1.split(":").map(Number);
-      const [h2,m2] = t2.split(":").map(Number);
-      let diff = (h2*60+m2) - (h1*60+m1); if (diff<0) diff += 24*60;
-      return diff/60;
-    }
-    return 0;
-  };
-  const durLabel = (type, duration, hours, t1, t2) => {
-    const h = hours ?? calcHours(type, duration, t1, t2);
-    if (type==="hours") return `${duration} hora${duration>1?"s":""}`;
-    if (type==="half-day") return `Medio día (${JORNADA/2}h)`;
-    if (type==="day") return `Día completo (${JORNADA}h)`;
-    if (type==="time-range") return `${t1}–${t2} (${h.toFixed(2)}h)`;
-    return "—";
-  };
-
-  /* ============ NÓMINA (seed/merge) ============ */
-  const STAFF_SEED = [
-    { run:'17.156.961-3', nombre:'MATÍAS FABRICIANO PESSO SABANDO', rol:'Profesor', jornada:11 },
-    { run:'17.185.396-6', nombre:'JAVIER IGNACIO LARA FAÚNDEZ', rol:'Profesor', jornada:40 },
-    { run:'20.520.049-5', nombre:'CECILIA DE LOS ANGELES MUÑOZ SALAZAR', rol:'Profesor', jornada:24 },
-    { run:'19.896.234-1', nombre:'PERLA EDITH SEPÚLVEDA MARÍN', rol:'Profesor', jornada:29 },
-    { run:'17.184.008-2', nombre:'NATALIA DE LOS ANGELES REYES CEBALLOS', rol:'Profesor', jornada:40 },
-    { run:'17.885.911-0', nombre:'DANIELA ALEJANDRA FUENTES ALEGRÍA', rol:'Profesor', jornada:36 },
-    { run:'18.311.975-3', nombre:'JAVIERA CONSUELO FLORES GALDAMES', rol:'Profesor', jornada:25 },
-    { run:'19.697.847-K', nombre:'DIEGO ANDRÉS LUNA RAMÍREZ', rol:'Profesor', jornada:38 },
-    { run:'17.039.250-7', nombre:'RENATO HERNÁN FLORIDOR ROJAS ROJAS', rol:'Profesor', jornada:28 },
-    { run:'18.893.433-1', nombre:'ÁNGELA GABRIELA TAPIA GONZÁLEZ', rol:'Profesor', jornada:42 },
-    { run:'19.010.251-3', nombre:'NICOLÁS IGNACIO LÓPEZ GONZÁLEZ', rol:'Profesor', jornada:44 },
-    { run:'17.039.979-K', nombre:'JUAN PABLO RAMÍREZ ACUÑA', rol:'Profesor', jornada:44 },
-    { run:'12.374.465-9', nombre:'ALEJANDRA MORALES', rol:'Profesor', jornada:44 },
-    { run:'9.651.728-9',  nombre:'BERNARDITA ROSA LOBOS VERGARA', rol:'MONITOR/A TALLER', jornada:8 },
-    { run:'11.285.289-1', nombre:'LUZMILA DEL PILAR GONZÁLEZ ARAVENA', rol:'AUXILIAR DE ASEO', jornada:44 },
-    { run:'9.950.645-8',  nombre:'LUIS EDGARDO MARIMÁN MARIMÁN', rol:'CUIDADO ESTABLECIMIENTO', jornada:44 },
-    { run:'9.593.281-9',  nombre:'MARISOL DE LAS MERCEDES RAMÍREZ GONZÁLEZ', rol:'AUXILIAR DE ASEO', jornada:44 },
-    { run:'16.793.129-4', nombre:'MARILYN SOLANGE GONZÁLEZ ESPINOZA', rol:'PSICÓLOGO/A', jornada:44 },
-    { run:'5.841.994-K',  nombre:'BERNARDITA DEL CARMEN CISTERNAS ARELLANO', rol:'MONITOR/A TALLER', jornada:5 },
-    { run:'9.453.656-1',  nombre:'JUAN ENRIQUE TOLEDO SEPÚLVEDA', rol:'OPERARIO', jornada:44 },
-    { run:'9.142.821-0',  nombre:'ENRIQUETA DEL CARMEN ESPINOSA TORRES', rol:'CONTADOR/A', jornada:44 },
-    { run:'14.021.316-0', nombre:'CLARA DEL PILAR PEÑA ASTROZA', rol:'BIBLIOTECARIO/A', jornada:44 },
-    { run:'13.788.129-2', nombre:'CRISTINA DE LAS MERCEDES CONTRERAS ÑANCULAF', rol:'SECRETARIO/A', jornada:44 },
-    { run:'13.372.068-5', nombre:'BERNARDITA ERNESTINA PEÑA ASTROZA', rol:'INSPECTOR/A', jornada:44 },
-    { run:'11.286.151-3', nombre:'ISAIAS HUMBERTO ORELLANA GONZÁLEZ', rol:'MANIPULADOR ALIMENTOS', jornada:44 },
-    { run:'15.569.010-0', nombre:'TERESA DE LAS MERCEDES NORAMBUENA GONZÁLEZ', rol:'ASISTENTE SOCIAL', jornada:44 }
-  ];
-
-  async function seedStaffMerge() {
-    const batch = db.batch();
-    STAFF_SEED.forEach(s => {
-      batch.set(db.collection(DB_STAFF).doc(cleanRun(s.run)), s, { merge: true });
+  <script defer>
+  (function(){
+    // Captura y muestra errores con detalle (evita "Script error.")
+    window.addEventListener('error', function(ev){
+      const msg = ev?.error?.stack || ev?.message || 'Error desconocido';
+      console.error('Error global:', ev?.error || ev);
+      const bar = document.getElementById('errbar');
+      if (bar) { bar.textContent = msg; bar.classList.remove('hidden'); }
     });
-    await batch.commit();
-  }
 
-  /* ============ Voucher ============ */
-  function Voucher({ permission, staffList, allPerms, folio, onClose }) {
-    const st = staffList.find(s => cleanRun(s.run) === permission.staffId);
-    const staffRun = st?.run || "N/A";
-       const staffRol = st?.rol || "—";
-    const currHours = calcHours(permission.type, permission.duration, permission.timeStart, permission.timeEnd);
-    const totalStaffHours = (allPerms||[])
-      .filter(p => p.staffId === permission.staffId)
-      .reduce((acc,p)=>acc+calcHours(p.type,p.duration,p.timeStart,p.timeEnd),0);
-    const totalStaffDays = totalStaffHours / JORNADA;
+    const boot = () => {
+      const {useState, useEffect, useMemo, Fragment} = React;
 
-    return (
-      React.createElement("div",{id:"voucher-print-area",className:"fixed inset-0 z-50 overflow-y-auto bg-gray-100 p-6"},
-        React.createElement("div",{className:"max-w-3xl mx-auto bg-white rounded-xl shadow border p-8"},
-          React.createElement("div",{className:"flex justify-between items-start border-b pb-3 mb-6"},
-            React.createElement("div",{className:"text-sm text-gray-500"},"Desarrollado por ProfeAle"),
-            React.createElement("div",{className:"text-right"},
-              React.createElement("p",{className:"text-green-600 font-bold text-lg"},"FOLIO: ",folio),
-              React.createElement("p",{className:"text-xs text-gray-500"},"Fecha: ", new Date().toLocaleDateString('es-CL',{timeZone:CL_TZ})),
-              React.createElement("p",{className:"text-xs text-gray-500"},"Hora: ",  new Date().toLocaleTimeString('es-CL',{hour12:false,timeZone:CL_TZ}))
-            )
-          ),
-          React.createElement("h2",{className:"text-2xl font-extrabold text-green-700 mb-1"},"COMPROBANTE DE PERMISO"),
-          React.createElement("p",{className:"text-xl font-bold"}, permission.staffName),
-          React.createElement("p",{className:"text-sm text-gray-600 mb-4"},"R.U.N.: ",staffRun," | Cargo: ",staffRol),
-
-          React.createElement("div",{className:"grid md:grid-cols-2 gap-6"},
-            React.createElement("div",null,
-              React.createElement("p",{className:"text-xs text-gray-500 font-semibold"},"Fecha del permiso"),
-              React.createElement("p",{className:"font-bold"}, formatDateCL(permission.date))
-            ),
-            React.createElement("div",null,
-              React.createElement("p",{className:"text-xs text-gray-500 font-semibold"},"Duración aprobada"),
-              React.createElement("p",{className:"font-bold text-blue-700"}, durLabel(permission.type,permission.duration,currHours,permission.timeStart,permission.timeEnd))
-            ),
-            React.createElement("div",null,
-              React.createElement("p",{className:"text-xs text-gray-500 font-semibold"},"Motivo"),
-              React.createElement("p",{className:"font-bold text-red-600"}, permission.reason==="checkup"?"Control médico":"Otro")
-            ),
-            React.createElement("div",null,
-              React.createElement("p",{className:"text-xs text-gray-500 font-semibold"},"Goce de sueldo"),
-              React.createElement("p",{className:`font-bold ${permission.isPaid?'text-emerald-700':'text-red-700'}`}, permission.isPaid?"Sí":"No")
-            )
-          ),
-
-          React.createElement("div",{className:"grid grid-cols-2 gap-3 p-3 rounded border bg-gray-50 mt-6"},
-            React.createElement("div",null,
-              React.createElement("p",{className:"text-xs text-gray-500 font-semibold"},"Total acumulado (horas)"),
-              React.createElement("p",{className:"font-extrabold text-emerald-700 text-lg"}, totalStaffHours.toFixed(2)," h")
-            ),
-            React.createElement("div",null,
-              React.createElement("p",{className:"text-xs text-gray-500 font-semibold"},`Total acumulado (días, ${JORNADA}h = 1 día)`),
-              React.createElement("p",{className:"font-extrabold text-indigo-700 text-lg"}, totalStaffDays.toFixed(2)," días")
-            )
-          ),
-
-          React.createElement("div",{className:"grid grid-cols-2 gap-12 mt-14 text-sm"},
-            React.createElement("div",null,
-              React.createElement("div",{className:"border-t pt-2 text-center font-semibold"},"Firma del Funcionario"),
-              React.createElement("p",{className:"text-xs text-center text-gray-600"},"(",permission.staffName,")")
-            ),
-            React.createElement("div",null,
-              React.createElement("div",{className:"border-t pt-2 text-center font-semibold"},"Firma del Representante Empresa"),
-              React.createElement("p",{className:"text-xs text-center text-gray-600"},"(",COMPANY_REP_NAME," - Dirección )")
-            )
-          ),
-
-          React.createElement("div",{className:"no-print flex justify-center gap-3 mt-8"},
-            React.createElement("button",{className:"px-4 py-2 rounded bg-blue-600 text-white",onClick:()=>window.print()},"Imprimir"),
-            React.createElement("button",{className:"px-4 py-2 rounded bg-gray-400 text-white",onClick:onClose},"Cerrar")
-          )
-        )
-      )
-    );
-  }
-
-  /* ============ APP ============ */
-  function App() {
-    if (initErr) {
-      return React.createElement("div",{className:"max-w-3xl mx-auto p-6"},
-        React.createElement("div",{className:"bg-red-50 border border-red-400 text-red-700 p-3 rounded"},
-          "No se pudo iniciar Firebase: ", initErr
-        )
-      );
-    }
-
-    const [err,setErr] = useState(null);
-    const [staff,setStaff] = useState([]);
-    const [perms,setPerms] = useState([]);
-    const [tab,setTab] = useState("register");
-
-    // formulario permiso
-    const [staffId,setStaffId] = useState("");
-    const [date,setDate] = useState(todayLocal());
-    const [type,setType] = useState("day");
-    const [duration,setDuration] = useState(1);
-    const [tStart,setTStart] = useState("08:00");
-    const [tEnd,setTEnd] = useState("09:00");
-    const [reason,setReason] = useState("checkup");
-    const [isPaid,setIsPaid] = useState(true);
-    const [details,setDetails] = useState("");
-
-    // edición / impresión
-    const [edit,setEdit] = useState(null);
-    const [printVoucher,setPrintVoucher] = useState(null);
-    const [folio,setFolio] = useState("");
-
-    // filtros
-    const [fMonth,setFMonth] = useState("");
-    const [fYear,setFYear]   = useState("");
-    const [fStaff,setFStaff] = useState("");
-
-    // gestión (alta)
-    const [gRun,setGRun] = useState("");
-    const [gNombre,setGNombre] = useState("");
-    const [gRol,setGRol] = useState("Profesor");
-    const [gJornada,setGJornada] = useState(44);
-
-    // cargar staff y permisos
-    useEffect(() => {
-      (async () => {
-        try { await seedStaffMerge(); } catch(e){ setErr("Error al sincronizar nómina: "+e.message); }
-      })();
-
-      const unsubStaff = db.collection(DB_STAFF).onSnapshot(
-        snap => {
-          const arr = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-          arr.sort((a,b)=> (a.nombre||"").localeCompare(b.nombre||""));
-          setStaff(arr);
-          if (!staffId && arr.length) setStaffId(cleanRun(arr[0].run));
-        },
-        e => setErr("Error al leer staff: "+e.message)
-      );
-
-      const unsubPerms = db.collection(DB_PERMS).onSnapshot(
-        snap => {
-          const arr = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-          arr.sort((a,b) => (a.timestamp||0)-(b.timestamp||0) || ((a.date||"").localeCompare(b.date||"")));
-          setPerms(arr);
-        },
-        e => setErr("Error al suscribir permisos: "+e.message)
-      );
-
-      return () => { unsubStaff && unsubStaff(); unsubPerms && unsubPerms(); };
-    },[]);
-
-    const summary = useMemo(() => {
-      const roleHours = { Profesor:0, Asistente:0, Otro:0 };
-      perms.forEach(p=>{
-        const st = staff.find(s=>cleanRun(s.run)===p.staffId);
-        const rol = st?.rol || "Otro";
-        const bucket = rol==="Profesor" ? "Profesor" : "Asistente";
-        roleHours[bucket] = (roleHours[bucket]||0) + calcHours(p.type,p.duration,p.timeStart,p.timeEnd);
-      });
-      const months = [...new Set(perms.map(p=>p.date?.slice(0,7)).filter(Boolean))].sort();
-      const years  = [...new Set(perms.map(p=>p.date?.slice(0,4)).filter(Boolean))].sort();
-
-      const filtered = perms.filter(p=>{
-        const okStaff = fStaff ? p.staffId===fStaff : true;
-        const okMonth = fMonth ? p.date?.slice(0,7)===fMonth : true;
-        const okYear  = fYear  ? p.date?.slice(0,4)===fYear  : true;
-        return okStaff && okMonth && okYear;
-      });
-      const totalHours = filtered.reduce((a,p)=>a+calcHours(p.type,p.duration,p.timeStart,p.timeEnd),0);
-      const chartData = Object.entries(roleHours).map(([rol,totalHours])=>({rol,totalHours}));
-      return { chartData, months, years, filtered, totalHours, totalDays:(totalHours/JORNADA).toFixed(2) };
-    },[perms,staff,fMonth,fYear,fStaff]);
-
-    /* === CRUD Permisos === */
-    const handleSave = async (e) => {
-      e?.preventDefault?.();
-      if (!staffId || !date) return alert("Faltan campos");
-      const st = staff.find(s=>cleanRun(s.run)===staffId);
-      const newP = {
-        staffId, staffName: st?.nombre || "Desconocido", date,
-        type, duration: type==="hours"?Number(duration):null,
-        timeStart: type==="time-range"?tStart:null,
-        timeEnd:   type==="time-range"?tEnd:null,
-        reason, isPaid, details, timestamp: Date.now()
+      // ======= CONFIG =======
+      const CL_TZ='America/Santiago';
+      const JORNADA=8;
+      const COMPANY_REP_NAME = 'Miguel Díaz J. - Director';
+      const firebaseConfig={
+        apiKey:"AIzaSyBnSMVCH0yyYUWk5z54kTIPTrWkyoeWs-I",
+        authDomain:"suspenciones-40d0c.firebaseapp.com",
+        projectId:"suspenciones-40d0c",
+        storageBucket:"suspenciones-40d0c.appspot.com",
+        appId:"1:853418739042:web:d051befb99cd2acacdd4583"
       };
-      try {
-        await db.collection(DB_PERMS).add(newP);
-        setDate(todayLocal()); setType("day"); setDuration(1); setTStart("08:00"); setTEnd("09:00");
-        setReason("checkup"); setIsPaid(true); setDetails(""); setTab("summary");
-      } catch(e){ setErr("Error al guardar: "+e.message); }
-    };
 
-    const handleDelete = async (id) => {
-      if (!confirm("¿Eliminar permiso?")) return;
-      try { await db.collection(DB_PERMS).doc(id).delete(); }
-      catch(e){ setErr("Error al eliminar: "+e.message); }
-    };
+      // Init Firebase (robusto)
+      let db = null;
+      try{
+        if(!window.firebase) throw new Error('Firebase no cargó');
+        const app = firebase.apps?.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
+        if(!firebase.firestore) throw new Error('Firestore no disponible');
+        db = firebase.firestore();
+      }catch(err){
+        console.error('Fallo inicializando Firebase:', err);
+        const bar = document.getElementById('errbar');
+        if (bar) { bar.textContent = '⚠️ '+(err.message||err); bar.classList.remove('hidden'); }
+      }
 
-    const handleUpdate = async () => {
-      if (!edit) return;
-      const payload = {
-        staffId: edit.staffId,
-        staffName: edit.staffName,
-        date: edit.date,
-        type: edit.type,
-        duration: edit.type==="hours" ? Number(edit.duration) : null,
-        timeStart: edit.type==="time-range" ? edit.timeStart : null,
-        timeEnd:   edit.type==="time-range" ? edit.timeEnd   : null,
-        reason: edit.reason,
-        isPaid: edit.isPaid,
-        details: edit.details
+      // ======= HELPERS =======
+      const cleanRun=s=>(s||'').replace(/[.\-]/g,'').toUpperCase();
+      const todayLocal=()=>new Date().toLocaleString('sv-SE',{timeZone:CL_TZ}).slice(0,10);
+      const semesterOf=(iso)=>{ if(!iso) return null; const m=Number(iso.slice(5,7)); return m<=6?1:2; };
+      const sameSemester=(a,b)=>{ if(!a||!b) return false; return a.slice(0,4)===b.slice(0,4) && semesterOf(a)===semesterOf(b); };
+      const calcHours=(type,dur,t1,t2)=>{
+        if(type==='hours')return Number(dur||0);
+        if(type==='half-day')return JORNADA/2;
+        if(type==='day')return JORNADA;
+        if(type==='time-range'&&t1&&t2){
+          const[h1,m1]=t1.split(":").map(Number);const[h2,m2]=t2.split(":").map(Number);
+          let diff=(h2*60+m2)-(h1*60+m1);if(diff<0)diff+=24*60;return diff/60;
+        }
+        return 0;
       };
-      try { await db.collection(DB_PERMS).doc(edit.id).update(payload); setEdit(null); }
-      catch(e){ alert("Error al actualizar: "+e.message); }
-    };
+      const durLabel=(type,duration,h,t1,t2)=>{
+        const hours=h ?? calcHours(type,duration,t1,t2);
+        if(type==='hours')return `${duration} hora${Number(duration)>1?'s':''}`;
+        if(type==='half-day')return `Medio día (${JORNADA/2}h)`;
+        if(type==='day')return `Día completo (${JORNADA}h)`;
+        if(type==='time-range')return `${t1}–${t2} (${hours.toFixed(2)}h)`;
+        return '—';
+      };
+      const permHours=p=>calcHours(p.type,p.duration,p.timeStart,p.timeEnd)||0;
+      const semHoursAccum=(all,row)=> (all||[])
+        .filter(x=>x.staffId===row.staffId && sameSemester(x.date,row.date))
+        .filter(x=>{
+          if(x.date<row.date) return true;
+          if(x.date>row.date) return false;
+          const xt=(x.timestamp||0), rt=(row.timestamp||0);
+          if(xt && rt) return xt<=rt;
+          return String(x.id)<=String(row.id);
+        })
+        .reduce((a,x)=>a+permHours(x),0);
+      const numberFmt=n=> (isFinite(n)?Number(n).toFixed(2):'0.00');
 
-    const computeFolio = (permId) => {
-      const year = (new Date().toLocaleString('en-CA',{timeZone:CL_TZ})).slice(0,4);
-      const permsYear = perms.filter(p => (p.date||"").slice(0,4)===year);
-      const idx = permsYear.findIndex(p => p.id === permId);
-      return (idx>=0 ? (idx+1) : "N/A") + "/" + year;
-    };
-
-    /* === Gestión de personal === */
-
-    // Agregar / actualizar funcionario
-    const handleAddStaff = async (e) => {
-      e?.preventDefault?.();
-      if (!gRun || !gNombre || !gRol || !gJornada) return alert("Completa RUN, Nombre, Rol y Jornada.");
-      const docId = cleanRun(gRun);
+      // ======= Self-tests (ampliados) =======
       try {
-        await db.collection(DB_STAFF).doc(docId).set({
-          run: gRun.trim(),
-          nombre: gNombre.trim(),
-          rol: gRol.trim(),
-          jornada: Number(gJornada)
-        }, { merge: true });
-        setGRun(""); setGNombre(""); setGRol("Profesor"); setGJornada(44);
-        alert("Funcionario agregado/actualizado.");
-      } catch(e){ setErr("Error al agregar funcionario: "+e.message); }
-    };
+        console.assert(calcHours('hours',2)===2,'T1');
+        console.assert(calcHours('half-day')===4,'T2');
+        console.assert(calcHours('day')===8,'T3');
+        console.assert(Math.abs(calcHours('time-range',null,'08:00','10:30')-2.5)<1e-9,'T4');
+        console.assert(Math.abs(calcHours('time-range',null,'22:00','02:00')-4)<1e-9,'T5 overnight');
+        console.assert(semesterOf('2025-03-01')===1 && semesterOf('2025-10-01')===2,'T6 sem');
+        console.assert(sameSemester('2025-05-01','2025-06-15') && !sameSemester('2025-06-15','2025-07-01'),'T7 sameSem');
+      } catch(e){ console.warn('Self-tests failed', e); }
 
-    // Eliminar funcionario + TODOS sus permisos (cascade)
-    const handleDeleteStaff = async (docId, nombre) => {
-      try {
-        const snapPerms = await db.collection(DB_PERMS).where('staffId','==',docId).get();
-        const cant = snapPerms.size;
-        if (!confirm(`Eliminar a ${nombre} y ${cant} permiso(s) asociado(s)? Esta acción es permanente.`)) return;
+      // ======= Cargador de html2pdf (UMD, confiable) =======
+      function loadHtml2Pdf(){
+        return new Promise((resolve,reject)=>{
+          if(window.html2pdf){ resolve(window.html2pdf); return; }
+          const s=document.createElement('script');
+          s.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+          s.onload=()=>resolve(window.html2pdf);
+          s.onerror=()=>reject(new Error('No se pudo cargar html2pdf'));
+          document.head.appendChild(s);
+        });
+      }
 
-        const batch = db.batch();
-        snapPerms.forEach(d => batch.delete(db.collection(DB_PERMS).doc(d.id)));
-        batch.delete(db.collection(DB_STAFF).doc(docId));
-        await batch.commit();
+      // ======= Impresión segura en HTML (evita popups bloqueados) =======
+      function safePrintHTML(html){
+        try{
+          // Fallback por iframe (no popup)
+          const iframe = document.createElement('iframe');
+          iframe.style.position='fixed';
+          iframe.style.right='0';
+          iframe.style.bottom='0';
+          iframe.style.width='0';
+          iframe.style.height='0';
+          iframe.style.border='0';
+          document.body.appendChild(iframe);
+          const doc = iframe.contentDocument || iframe.contentWindow.document;
+          doc.open(); doc.write(html); doc.close();
+          iframe.onload = () => {
+            try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch(e) { console.error(e); }
+            setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch(_){} }, 500);
+          };
+        }catch(err){
+          alert('No se pudo imprimir el listado. Revisa consola.');
+          console.error(err);
+        }
+      }
 
-        alert(`Se eliminó a ${nombre} y ${cant} permiso(s) asociado(s).`);
-      } catch(e){ setErr("Error al eliminar funcionario y permisos: "+e.message); }
-    };
+      // ======= Voucher =======
+      function Voucher({permission, staffList, allPerms, onClose}){
+        const staff=staffList.find(s=>cleanRun(s.run)===permission.staffId);
+        const currHours = permHours(permission);
+        const semHours = (allPerms||[])
+          .filter(p=>p.staffId===permission.staffId && sameSemester(p.date, permission.date))
+          .reduce((acc,p)=>acc+permHours(p),0);
+        const showLimit = semHours>=16;
+        const year=(permission.date||'').slice(0,4) || String(new Date().getFullYear());
+        const permsYear=(allPerms||[]).filter(p=> (p.date||'').slice(0,4)===year);
+        const ordered=[...permsYear].sort((a,b)=> (a.timestamp||0)-(b.timestamp||0) );
+        const folioIndex= Math.max(0, ordered.findIndex(p=>p.id===permission.id)) + 1;
+        const folio = `${folioIndex}/${year}`;
 
-    const TabBtn = ({id,children}) =>
-      React.createElement("button",
-        {onClick:()=>setTab(id),
-         className:`px-4 py-2 rounded-t font-semibold ${tab===id?'bg-green-700 text-white':'bg-gray-200 hover:bg-gray-300'}`},
-        children
-      );
+        async function exportPDF(){
+          try{
+            await loadHtml2Pdf();
+            const el=document.getElementById('voucher-print-area');
+            window.html2pdf().set({margin:0.5,filename:`voucher_${permission.staffName}_${year}.pdf`,image:{type:'jpeg',quality:0.98},html2canvas:{scale:2},jsPDF:{unit:'in',format:'letter',orientation:'portrait'}}).from(el).save();
+          }catch(e){
+            alert('No se pudo exportar a PDF. Ver consola.');
+            console.error(e);
+          }
+        }
 
-    /* ===== UI ===== */
-    const mainUI = React.createElement("div",{className:`max-w-6xl mx-auto p-6 ${printVoucher?'hidden print:hidden':''}`},
-      React.createElement("h1",{className:"text-3xl font-extrabold text-green-800 mb-4"},"Control de Permisos"),
-      err && React.createElement("div",{className:"bg-red-50 border border-red-400 text-red-700 p-3 rounded mb-4"}, err),
-
-      React.createElement("div",{className:"flex gap-2 border-b border-green-700 mb-6"},
-        React.createElement(TabBtn,{id:"register"},"Registrar"),
-        React.createElement(TabBtn,{id:"summary"},"Resumen"),
-        React.createElement(TabBtn,{id:"manage"},"Gestión")
-      ),
-
-      /* Registrar */
-      tab==="register" && React.createElement("form",{onSubmit:handleSave,className:"bg-white rounded-xl shadow p-6 space-y-4"},
-        React.createElement("div",{className:"grid md:grid-cols-2 gap-4"},
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Funcionario"),
-            React.createElement("select",{value:staffId,onChange:e=>setStaffId(e.target.value),className:"w-full p-3 border rounded"},
-              staff.length ? staff.map(s=>React.createElement("option",{key:s.id,value:cleanRun(s.run)},`${s.nombre} (${s.rol})`))
-                           : [React.createElement("option",{key:"-",value:""},"(Cargando nómina)")]
-            )
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Fecha"),
-            React.createElement("input",{type:"date",value:date,onChange:e=>setDate(e.target.value),className:"w-full p-3 border rounded"})
-          )
-        ),
-        React.createElement("div",{className:"grid md:grid-cols-4 gap-4 items-end"},
-          React.createElement("div",{className:"md:col-span-2"},
-            React.createElement("label",{className:"block text-sm mb-1"},"Tipo"),
-            React.createElement("select",{value:type,onChange:e=>{setType(e.target.value); if(e.target.value!=='hours')setDuration(1);},className:"w-full p-3 border rounded"},
-              React.createElement("option",{value:"day"},"Día completo (8h)"),
-              React.createElement("option",{value:"half-day"},"Medio día (4h)"),
-              React.createElement("option",{value:"hours"},"Por horas (manual)"),
-              React.createElement("option",{value:"time-range"},"Por horas (rango)")
-            )
-          ),
-          type==="hours" && React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"N° Horas"),
-            React.createElement("input",{type:"number",step:"0.5",min:"0.5",max:"8",value:duration,onChange:e=>setDuration(e.target.value),className:"w-full p-3 border rounded"})
-          ),
-          type==="time-range" && React.createElement(Fragment,null,
-            React.createElement("div",null,
-              React.createElement("label",{className:"block text-sm mb-1"},"Desde"),
-              React.createElement("input",{type:"time",value:tStart,onChange:e=>setTStart(e.target.value),className:"w-full p-3 border rounded"})
-            ),
-            React.createElement("div",null,
-              React.createElement("label",{className:"block text-sm mb-1"},"Hasta"),
-              React.createElement("input",{type:"time",value:tEnd,onChange:e=>setTEnd(e.target.value),className:"w-full p-3 border rounded"})
-            )
-          )
-        ),
-        React.createElement("div",{className:"grid md:grid-cols-3 gap-4"},
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Motivo"),
-            React.createElement("select",{value:reason,onChange:e=>setReason(e.target.value),className:"w-full p-3 border rounded"},
-              React.createElement("option",{value:"checkup"},"Control médico"),
-              React.createElement("option",{value:"other"},"Otro")
-            )
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Goce de sueldo"),
-            React.createElement("select",{value:String(isPaid),onChange:e=>setIsPaid(e.target.value==='true'),className:"w-full p-3 border rounded"},
-              React.createElement("option",{value:"true"},"Sí"),
-              React.createElement("option",{value:"false"},"No")
-            )
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Detalles (opcional)"),
-            React.createElement("input",{type:"text",value:details,onChange:e=>setDetails(e.target.value),className:"w-full p-3 border rounded"})
-          )
-        ),
-        React.createElement("button",{type:"submit",className:"py-3 px-4 bg-green-600 text-white font-bold rounded"},"Guardar permiso")
-      ),
-
-      /* Resumen */
-      tab==="summary" && React.createElement("div",{className:"space-y-6"},
-        React.createElement("div",{className:"grid md:grid-cols-3 gap-4"},
-          React.createElement("div",{className:"bg-white rounded-xl shadow border p-4"},
-            React.createElement("p",{className:"text-xs text-gray-500"},"Permisos registrados"),
-            React.createElement("p",{className:"text-3xl font-extrabold"}, perms.length)
-          ),
-          React.createElement("div",{className:"bg-white rounded-xl shadow border p-4"},
-            React.createElement("p",{className:"text-xs text-gray-500"},"Horas totales acumuladas"),
-            React.createElement("p",{className:"text-3xl font-extrabold text-emerald-700"},
-              perms.reduce((a,p)=>a+calcHours(p.type,p.duration,p.timeStart,p.timeEnd),0).toFixed(1)," h")
-          ),
-          React.createElement("div",{className:"bg-white rounded-xl shadow border p-4"},
-            React.createElement("p",{className:"text-xs text-gray-500"},`Días totales ( ${JORNADA}h = 1 día )`),
-            React.createElement("p",{className:"text-3xl font-extrabold text-indigo-700"},
-              (perms.reduce((a,p)=>a+calcHours(p.type,p.duration,p.timeStart,p.timeEnd),0)/JORNADA).toFixed(2)," días")
-          )
-        ),
-        React.createElement("div",{className:"bg-white rounded-xl shadow p-6"},
-          React.createElement("h3",{className:"font-semibold mb-2"},"Horas por rol"),
-          (R && R.BarChart && perms.length>0) ?
-            React.createElement("div",{style:{width:"100%",height:320}},
-              React.createElement(ResponsiveContainer,{width:"100%",height:"100%"},
-                React.createElement(BarChart,{data:summary.chartData,margin:{top:5,right:20,left:0,bottom:5}},
-                  React.createElement(CartesianGrid,{strokeDasharray:"3 3"}),
-                  React.createElement(XAxis,{dataKey:"rol"}),
-                  React.createElement(YAxis,null),
-                  React.createElement(Tooltip,null),
-                  React.createElement(Legend,null),
-                  React.createElement(Bar,{dataKey:"totalHours",name:"Horas",fill:"#10b981"})
-                )
+        return React.createElement('div',{id:'voucher-print-area',className:'fixed inset-0 z-50 overflow-y-auto p-6 bg-gray-100'},
+          React.createElement('div',{className:'max-w-3xl mx-auto bg-white rounded-xl shadow border p-8'},
+            React.createElement('div',{className:'flex items-start justify-between border-b pb-3 mb-6'},
+              React.createElement('div',{className:'text-left'},
+                React.createElement('p',{className:'text-xs text-gray-500 mb-1'},'Desarrollado por ProfeAle'),
+                React.createElement('p',{className:'text-sm text-gray-500'},'Comprobante de Permiso')
+              ),
+              React.createElement('div',{className:'text-right'},
+                React.createElement('p',{className:'text-green-600 font-bold text-lg'},'FOLIO: ', folio),
+                React.createElement('p',{className:'text-xs text-gray-500'},'Fecha: ', new Date().toLocaleDateString('es-CL',{timeZone:CL_TZ})),
+                React.createElement('p',{className:'text-xs text-gray-500'},'Hora: ', new Date().toLocaleTimeString('es-CL',{hour12:false,timeZone:CL_TZ}))
               )
+            ),
+            showLimit && React.createElement('div',{className:'mb-4 p-3 border-2 border-red-500 bg-red-50 text-red-700 font-bold rounded text-center'},
+              '⚠️ Ya usaste los permisos establecidos para este semestre (16 horas). Los próximos serán descontados. ⚠️'
+            ),
+            React.createElement('h2',{className:'text-2xl font-extrabold text-green-700 mb-2'},permission.staffName),
+            React.createElement('p',{className:'text-sm text-gray-600 mb-6'},'RUN: ', staff?.run || 'N/A', ' · Cargo: ', staff?.rol || '—'),
+            React.createElement('div',{className:'grid md:grid-cols-2 gap-6'},
+              React.createElement('div',null,React.createElement('p',{className:'text-xs text-gray-500'},'Fecha'),React.createElement('p',{className:'font-bold'},permission.date)),
+              React.createElement('div',null,React.createElement('p',{className:'text-xs text-gray-500'},'Duración'),React.createElement('p',{className:'font-bold text-blue-700'},durLabel(permission.type,permission.duration,null,permission.timeStart,permission.timeEnd))),
+              React.createElement('div',null,React.createElement('p',{className:'text-xs text-gray-500'},'Motivo'),React.createElement('p',{className:'font-bold'},permission.reason==='checkup'?'Control médico':'Otro')),
+              React.createElement('div',null,React.createElement('p',{className:'text-xs text-gray-500'},'Goce de sueldo'),React.createElement('p',{className:'font-bold'},permission.isPaid?'Sí':'No')),
+              React.createElement('div',null,React.createElement('p',{className:'text-xs text-gray-500'},'Deja material'),React.createElement('p',{className:'font-bold'},permission.leaveMaterial?'Sí':'No'))
+            ),
+            React.createElement('div',{className:'grid md:grid-cols-3 gap-3 p-3 rounded border bg-gray-50 mt-6'},
+              React.createElement('div',null,
+                React.createElement('p',{className:'text-xs text-gray-500 font-semibold'},'Horas de este permiso'),
+                React.createElement('p',{className:'text-lg font-extrabold text-emerald-700'}, numberFmt(currHours), ' h')
+              ),
+              React.createElement('div',null,
+                React.createElement('p',{className:'text-xs text-gray-500 font-semibold'},'Acumuladas este semestre'),
+                React.createElement('p',{className:'text-lg font-extrabold text-indigo-700'}, numberFmt(semHours), ' h (', numberFmt(semHours/JORNADA), ' días)')
+              ),
+              React.createElement('div',null,
+                React.createElement('p',{className:'text-xs text-gray-500 font-semibold'},'Límite de referencia'),
+                React.createElement('p',{className:'text-lg font-extrabold',style:{color: (semHours>=16)?'#b91c1c':'#374151'}}, (semHours>=16)? 'Superado (16 h)' : `Restan ${numberFmt(16-semHours)} h`)
+              )
+            ),
+            React.createElement('div',{className:'grid grid-cols-2 gap-12 mt-14 text-sm'},
+              React.createElement('div',null,
+                React.createElement('div',{className:'border-t pt-2 text-center font-semibold'},'Firma del Funcionario'),
+                React.createElement('p',{className:'text-xs text-center text-gray-600'},'(',permission.staffName,')')
+              ),
+              React.createElement('div',null,
+                React.createElement('div',{className:'border-t pt-2 text-center font-semibold'},'Firma del Representante Empresa'),
+                React.createElement('p',{className:'text-xs text-center text-gray-600'},'(',COMPANY_REP_NAME,')')
+              )
+            ),
+            React.createElement('div',{className:'no-print flex justify-center gap-3 mt-8'},
+              React.createElement('button',{className:'px-4 py-2 bg-blue-600 text-white rounded',onClick:()=>window.print()},'Imprimir'),
+              React.createElement('button',{className:'px-4 py-2 bg-purple-600 text-white rounded',onClick:exportPDF},'Exportar PDF'),
+              React.createElement('button',{className:'px-4 py-2 bg-gray-500 text-white rounded',onClick:onClose},'Cerrar')
             )
-          : React.createElement("p",{className:"text-gray-500 italic"},"No hay datos para graficar.")
-        ),
-        React.createElement("div",{className:"bg-white rounded-xl shadow p-6"},
-          React.createElement("h3",{className:"font-semibold mb-3"},"Listado de permisos"),
-          React.createElement("div",{className:"grid md:grid-cols-4 gap-3 mb-3"},
-            React.createElement("select",{value:fStaff,onChange:e=>setFStaff(e.target.value),className:"p-2 border rounded"},
-              React.createElement("option",{value:""},"Todos (Funcionario)"),
-              staff.map(s=>React.createElement("option",{key:s.id,value:cleanRun(s.run)},s.nombre))
+          )
+        );
+      }
+
+      // ======= Resumen =======
+      function Resumen({perms, staff}){
+        const [fStaff, setFStaff] = useState('ALL');
+        const [fMonth, setFMonth] = useState('ALL');
+        const [fYear, setFYear] = useState('ALL');
+
+        const filtered = useMemo(()=>{
+          return (perms||[]).filter(p=>{
+            if(fStaff!=='ALL' && p.staffId!==fStaff) return false;
+            if(fYear!=='ALL' && (p.date||'').slice(0,4)!==fYear) return false;
+            if(fMonth!=='ALL' && Number((p.date||'').slice(5,7))!==Number(fMonth)) return false;
+            return true;
+          });
+        },[perms,fStaff,fMonth,fYear]);
+
+        const totalHoras = useMemo(()=>filtered.reduce((a,p)=>a+permHours(p),0),[filtered]);
+
+        const horasPorRol = useMemo(()=>{
+          const map={};
+          filtered.forEach(p=>{
+            const s = staff.find(x=>cleanRun(x.run)===p.staffId);
+            const rol = s?.rol || 'Sin rol';
+            map[rol] = (map[rol]||0) + permHours(p);
+          });
+          return map;
+        },[filtered,staff]);
+
+        const roles = Object.keys(horasPorRol);
+
+        const imprimirListado = ()=>{
+          const rows = filtered.map(p=>`<tr><td>${p.staffName}</td><td>${p.date}</td><td>${durLabel(p.type,p.duration,null,p.timeStart,p.timeEnd)}</td><td>${numberFmt(permHours(p))}</td><td>${p.reason==='checkup'?'Control médico':'Otro'}</td></tr>`).join('');
+          const html = `<!doctype html><html><head><meta charset='utf-8'><title>Listado</title>
+            <style>body{font-family:system-ui,Arial,sans-serif}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f3f4f6}</style>
+            </head><body>
+            <h3>Listado de Permisos</h3>
+            <p>Filtro: ${(fStaff==='ALL'?'Todos':(staff.find(s=>cleanRun(s.run)===fStaff)?.nombre||''))} · ${(fMonth==='ALL'?'Todos los meses':'Mes '+fMonth)} · ${(fYear==='ALL'?'Todos los años':fYear)}</p>
+            <table><thead><tr><th>Funcionario</th><th>Fecha</th><th>Duración</th><th>Horas</th><th>Motivo</th></tr></thead><tbody>${rows}</tbody></table>
+            <p>Total horas: ${numberFmt(totalHoras)} h · Total días: ${numberFmt(totalHoras/8)} días</p>
+            </body></html>`;
+          // Usar impresión por iframe (evita popups bloqueados/CORS)
+          safePrintHTML(html);
+        };
+
+        return React.createElement('div',null,
+          React.createElement('div',{className:'grid md:grid-cols-3 gap-4 mb-6'},
+            React.createElement('div',{className:'border rounded-xl p-4'},
+              React.createElement('p',{className:'text-sm text-gray-500'},'Permisos registrados'),
+              React.createElement('p',{className:'text-3xl font-extrabold'}, filtered.length)
             ),
-            React.createElement("select",{value:fMonth,onChange:e=>setFMonth(e.target.value),className:"p-2 border rounded"},
-              React.createElement("option",{value:""},"Todos (Mes)"),
-              [...new Set(perms.map(p=>p.date?.slice(0,7)).filter(Boolean))].sort().map(m=>React.createElement("option",{key:m,value:m},m))
+            React.createElement('div',{className:'border rounded-xl p-4'},
+              React.createElement('p',{className:'text-sm text-gray-500'},'Horas totales acumuladas'),
+              React.createElement('p',{className:'text-3xl font-extrabold text-emerald-700'}, numberFmt(totalHoras),' h')
             ),
-            React.createElement("select",{value:fYear,onChange:e=>setFYear(e.target.value),className:"p-2 border rounded"},
-              React.createElement("option",{value:""},"Todos (Año)"),
-              [...new Set(perms.map(p=>p.date?.slice(0,4)).filter(Boolean))].sort().map(y=>React.createElement("option",{key:y,value:y},y))
-            ),
-            React.createElement("button",{className:"no-print px-3 py-2 bg-blue-600 text-white rounded",onClick:()=>window.print(),disabled:perms.length===0},"Imprimir listado")
+            React.createElement('div',{className:'border rounded-xl p-4'},
+              React.createElement('p',{className:'text-sm text-gray-500'},'Días totales ( 8h = 1 día )'),
+              React.createElement('p',{className:'text-3xl font-extrabold text-indigo-700'}, numberFmt(totalHoras/8),' días')
+            )
           ),
-          React.createElement("div",{id:"report-print-area"},
-            React.createElement("table",{className:"min-w-full border"},
-              React.createElement("thead",{className:"bg-gray-100"},
-                React.createElement("tr",null,
-                  React.createElement("th",{className:"px-3 py-2 text-left text-xs font-bold"},"Funcionario"),
-                  React.createElement("th",{className:"px-3 py-2 text-left text-xs font-bold"},"Fecha"),
-                  React.createElement("th",{className:"px-3 py-2 text-left text-xs font-bold"},"Duración"),
-                  React.createElement("th",{className:"px-3 py-2 text-left text-xs font-bold"},"Motivo"),
-                  React.createElement("th",{className:"px-3 py-2 text-right text-xs font-bold"},"Horas")
+
+          React.createElement('div',{className:'border rounded-xl p-4 mb-6'},
+            React.createElement('h3',{className:'font-semibold mb-2'},'Horas por rol'),
+            roles.length===0
+              ? React.createElement('p',{className:'text-gray-500'},'No hay datos para graficar.')
+              : React.createElement('div',{className:'grid grid-cols-2 md:grid-cols-4 gap-3'},
+                  roles.map(r=> React.createElement('div',{key:r,className:'bg-gray-50 border rounded p-3'},
+                    React.createElement('p',{className:'text-xs text-gray-500'},r),
+                    React.createElement('p',{className:'text-lg font-bold'}, numberFmt(horasPorRol[r]), ' h')
+                  ))
+                )
+          ),
+
+          React.createElement('div',{className:'border rounded-xl p-4'},
+            React.createElement('h3',{className:'font-semibold mb-3'},'Listado de permisos'),
+            React.createElement('div',{className:'flex flex-wrap gap-3 mb-3'},
+              React.createElement('select',{value:fStaff,onChange:e=>setFStaff(e.target.value),className:'border rounded p-2'},
+                React.createElement('option',{value:'ALL'},'Todos (Funcionario)'),
+                staff.map(s=> React.createElement('option',{key:s.id,value:cleanRun(s.run)}, s.nombre))
+              ),
+              React.createElement('select',{value:fMonth,onChange:e=>setFMonth(e.target.value),className:'border rounded p-2'},
+                React.createElement('option',{value:'ALL'},'Todos (Mes)'),
+                Array.from({length:12},(_,i)=>i+1).map(m=> React.createElement('option',{key:m,value:m}, m))
+              ),
+              React.createElement('select',{value:fYear,onChange:e=>setFYear(e.target.value),className:'border rounded p-2'},
+                React.createElement('option',{value:'ALL'},'Todos (Año)'),
+                Array.from(new Set((perms||[]).map(p=> (p.date||'').slice(0,4)).filter(Boolean))).map(y=> React.createElement('option',{key:y,value:y}, y))
+              ),
+              React.createElement('button',{className:'ml-auto bg-blue-600 text-white px-4 py-2 rounded',onClick:imprimirListado},'Imprimir listado')
+            ),
+            React.createElement('table',{className:'min-w-full border text-sm'},
+              React.createElement('thead',{className:'bg-gray-100'},
+                React.createElement('tr',null,
+                  React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Funcionario'),
+                  React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Fecha'),
+                  React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Duración'),
+                  React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Motivo'),
+                  React.createElement('th',{className:'px-3 py-2 text-right font-bold'},'Horas')
                 )
               ),
-              React.createElement("tbody",null,
-                summary.filtered.map(p =>
-                  React.createElement("tr",{key:p.id,className:"border-t"},
-                    React.createElement("td",{className:"px-3 py-2"},p.staffName),
-                    React.createElement("td",{className:"px-3 py-2"},formatDateCL(p.date)),
-                    React.createElement("td",{className:"px-3 py-2"},durLabel(p.type,p.duration,null,p.timeStart,p.timeEnd)),
-                    React.createElement("td",{className:"px-3 py-2"},p.reason==="checkup"?"Control médico":"Otro"),
-                    React.createElement("td",{className:"px-3 py-2 text-right font-semibold"},calcHours(p.type,p.duration,p.timeStart,p.timeEnd).toFixed(2))
-                  )
-                ),
-                (()=>{
-                  const h = summary.filtered.reduce((a,p)=>a+calcHours(p.type,p.duration,p.timeStart,p.timeEnd),0);
-                  return React.createElement("tr",{className:"bg-green-50 font-bold border-t"},
-                    React.createElement("td",{className:"px-3 py-2",colSpan:4},"TOTAL (horas / días)"),
-                    React.createElement("td",{className:"px-3 py-2 text-right"},h.toFixed(2)," h / ",(h/JORNADA).toFixed(2)," días")
-                  );
-                })()
+              React.createElement('tbody',null,
+                filtered.map(p=> React.createElement('tr',{key:p.id,className:'border-t'},
+                  React.createElement('td',{className:'px-3 py-2'}, p.staffName),
+                  React.createElement('td',{className:'px-3 py-2'}, p.date),
+                  React.createElement('td',{className:'px-3 py-2'}, durLabel(p.type,p.duration,null,p.timeStart,p.timeEnd)),
+                  React.createElement('td',{className:'px-3 py-2'}, p.reason==='checkup'?'Control médico':'Otro'),
+                  React.createElement('td',{className:'px-3 py-2 text-right font-semibold'}, numberFmt(permHours(p)))
+                ))
               )
             )
           )
-        ),
-        React.createElement("div",{className:"bg-white rounded-xl shadow p-6"},
-          React.createElement("h3",{className:"font-semibold mb-3"},"Historial (orden de emisión)"),
-          perms.length===0 ? React.createElement("p",{className:"text-gray-500"},"No hay permisos aún.") :
-          React.createElement("ul",{className:"divide-y"},
-            perms.map(p =>
-              React.createElement("li",{key:p.id,className:"py-2 flex items-center justify-between gap-3"},
-                React.createElement("div",{className:"min-w-0"},
-                  React.createElement("p",{className:"font-semibold"},p.staffName),
-                  React.createElement("p",{className:"text-xs text-gray-500"}, formatDateCL(p.date)," · ", durLabel(p.type,p.duration,null,p.timeStart,p.timeEnd))
+        );
+      }
+
+      // ======= Modal de Edición (arreglado) =======
+      function EditModal({edit, onSave, onCancel}){
+        const {useState, Fragment} = React;
+        const [d,setD]=useState(edit.date||'');
+        const [n,setN]=useState(Number(edit.duration||1));
+        const [ts,setTs]=useState(edit.timeStart||'08:00');
+        const [te,setTe]=useState(edit.timeEnd||'09:00');
+
+        const save=()=>{
+          const patch={
+            date:d,
+            duration: edit.type==='hours'? Number(n||0) : null,
+            timeStart: edit.type==='time-range'? (ts||'08:00') : null,
+            timeEnd:   edit.type==='time-range'? (te||'09:00') : null,
+          };
+          onSave(edit.id, edit.type, patch);
+        };
+
+        return React.createElement('div',{className:'fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4'},
+          React.createElement('div',{className:'bg-white rounded-xl shadow-xl w-full max-w-lg p-6'},
+            React.createElement('h3',{className:'text-lg font-semibold mb-4'},'Editar permiso (fecha y horas)'),
+            React.createElement('div',{className:'grid gap-3'},
+              React.createElement('div',null,
+                React.createElement('label',{className:'block text-sm mb-1'},'Fecha'),
+                React.createElement('input',{type:'date',value:d,onChange:e=>setD(e.target.value),className:'border rounded p-2 w-full'})
+              ),
+              edit.type==='hours' && React.createElement('div',null,
+                React.createElement('label',{className:'block text-sm mb-1'},'N° horas'),
+                React.createElement('input',{type:'number',step:'0.5',min:'0.5',max:'12',value:n,onChange:e=>setN(e.target.value),className:'border rounded p-2 w-full'})
+              ),
+              edit.type==='time-range' && React.createElement(Fragment,null,
+                React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'Desde'),
+                  React.createElement('input',{type:'time',value:ts,onChange:e=>setTs(e.target.value),className:'border rounded p-2 w-full'})
                 ),
-                React.createElement("div",{className:"flex items-center gap-2"},
-                  React.createElement("button",{className:"no-print px-2 py-1 rounded bg-blue-600 text-white",onClick:()=>{setFolio(computeFolio(p.id)); setPrintVoucher(p);}},"Imprimir"),
-                  React.createElement("button",{className:"no-print px-2 py-1 rounded bg-orange-600 text-white",onClick:()=>setEdit(p)},"Editar"),
-                  React.createElement("button",{className:"no-print px-2 py-1 rounded bg-red-600 text-white",onClick:()=>handleDelete(p.id)},"Eliminar")
+                React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'Hasta'),
+                  React.createElement('input',{type:'time',value:te,onChange:e=>setTe(e.target.value),className:'border rounded p-2 w-full'})
                 )
+              ),
+              (edit.type==='day'||edit.type==='half-day') && React.createElement('p',{className:'text-xs text-gray-500'},'Este tipo tiene horas fijas (8h / 4h). Solo se edita la fecha.')
+            ),
+            React.createElement('div',{className:'flex justify-end gap-2 mt-6'},
+              React.createElement('button',{className:'px-4 py-2 rounded bg-gray-200',onClick:onCancel},'Cancelar'),
+              React.createElement('button',{className:'px-4 py-2 rounded bg-green-600 text-white',onClick:save},'Guardar cambios')
+            )
+          )
+        );
+      }
+
+      // ======= Gestión de Personal =======
+      function GestionPersonal(){
+        const [list,setList]=useState([]);
+        const [run,setRun]=useState('');
+        const [nombre,setNombre]=useState('');
+        const [rol,setRol]=useState('Profesor');
+        const [jornada,setJornada]=useState(44);
+
+        useEffect(()=>{
+          if(!db) return; // si no hay DB, evita errores
+          const staffPath=`artifacts/${firebaseConfig.projectId}/staff`;
+          const unsub=db.collection(staffPath).onSnapshot(snap=>{
+            const arr=snap.docs.map(d=>({id:d.id,...d.data()}));
+            arr.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+            setList(arr);
+          });
+          return ()=>unsub();
+        },[]);
+
+        const upsert = async()=>{
+          if(!db) return alert('BD no disponible');
+          if(!run||!nombre) return alert('RUN y Nombre son obligatorios');
+          const id = cleanRun(run);
+          await db.collection(`artifacts/${firebaseConfig.projectId}/staff`).doc(id).set({
+            run, nombre, rol, jornada: Number(jornada)
+          },{merge:true});
+          setRun(''); setNombre(''); setRol('Profesor'); setJornada(44);
+        };
+        const remove = async(id)=>{
+          if(!db) return alert('BD no disponible');
+          if(confirm('¿Eliminar funcionario?')){
+            await db.collection(`artifacts/${firebaseConfig.projectId}/staff`).doc(id).delete();
+          }
+        };
+
+        return React.createElement('div',null,
+          React.createElement('h3',{className:'font-semibold mb-3'},'Gestión de Personal'),
+          !db && React.createElement('p',{className:'text-red-600 text-sm mb-2'},'Sin conexión a Firestore.'),
+          React.createElement('div',{className:'grid md:grid-cols-5 gap-3 mb-3'},
+            React.createElement('input',{placeholder:'12.345.678-9',value:run,onChange:e=>setRun(e.target.value),className:'border p-2 rounded'}),
+            React.createElement('input',{placeholder:'Nombre',value:nombre,onChange:e=>setNombre(e.target.value),className:'border p-2 rounded md:col-span-2'}),
+            React.createElement('select',{value:rol,onChange:e=>setRol(e.target.value),className:'border p-2 rounded'},
+              ['Profesor','INSPECTOR/A','AUXILIAR DE ASEO','MONITOR/A TALLER','BIBLIOTECARIO/A','DIRECTOR/A','UTP'].map(r=> React.createElement('option',{key:r,value:r},r))
+            ),
+            React.createElement('input',{type:'number',min:'1',max:'44',value:jornada,onChange:e=>setJornada(e.target.value),className:'border p-2 rounded',placeholder:'Jornada'})
+          ),
+          React.createElement('button',{className:'bg-emerald-600 text-white px-4 py-2 rounded mb-4',onClick:upsert},'Agregar / Actualizar'),
+          React.createElement('table',{className:'min-w-full border text-sm'},
+            React.createElement('thead',{className:'bg-gray-100'},
+              React.createElement('tr',null,
+                React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'RUN'),
+                React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Nombre'),
+                React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Rol'),
+                React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Jornada'),
+                React.createElement('th',{className:'px-3 py-2 text-right font-bold'},'Acciones')
               )
+            ),
+            React.createElement('tbody',null,
+              list.map(s=> React.createElement('tr',{key:s.id,className:'border-t'},
+                React.createElement('td',{className:'px-3 py-2'}, s.run),
+                React.createElement('td',{className:'px-3 py-2'}, s.nombre),
+                React.createElement('td',{className:'px-3 py-2'}, s.rol||'—'),
+                React.createElement('td',{className:'px-3 py-2'}, s.jornada||'—'),
+                React.createElement('td',{className:'px-3 py-2 text-right'},
+                  React.createElement('button',{className:'bg-red-600 text-white px-3 py-1 rounded',onClick:()=>remove(s.id)},'Eliminar')
+                )
+              ))
             )
           )
-        )
-      ),
+        );
+      }
 
-      /* Gestión */
-      tab==="manage" && React.createElement("div",{className:"bg-white rounded-xl shadow p-6 space-y-6"},
-        React.createElement("h3",{className:"font-semibold"},"Gestión de Personal"),
+      // ======= APP =======
+      function App(){
+        const [tab,setTab]=useState('registrar');
+        const [staff,setStaff]=useState([]);
+        const [perms,setPerms]=useState([]);
+        const [staffId,setStaffId]=useState('');
+        const [date,setDate]=useState(todayLocal());
+        const [type,setType]=useState('day');
+        const [duration,setDuration]=useState(1);
+        const [tStart,setTStart]=useState('08:00');
+        const [tEnd,setTEnd]=useState('09:00');
+        const [reason,setReason]=useState('checkup');
+        const [isPaid,setIsPaid]=useState(true);
+        const [leaveMaterial,setLeaveMaterial]=useState(false);
+        const [details,setDetails]=useState('');
+        const [edit,setEdit]=useState(null);
+        const [printVoucher,setPrintVoucher]=useState(null);
+        const [alertMsg,setAlertMsg]=useState('');
 
-        /* Agregar / actualizar */
-        React.createElement("form",{onSubmit:handleAddStaff,className:"grid md:grid-cols-5 gap-3 items-end"},
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"RUN"),
-            React.createElement("input",{type:"text",placeholder:"12.345.678-9",value:gRun,onChange:e=>setGRun(e.target.value),className:"w-full p-2 border rounded",required:true})
-          ),
-          React.createElement("div",{className:"md:col-span-2"},
-            React.createElement("label",{className:"block text-sm mb-1"},"Nombre"),
-            React.createElement("input",{type:"text",value:gNombre,onChange:e=>setGNombre(e.target.value),className:"w-full p-2 border rounded",required:true})
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Rol"),
-            React.createElement("select",{value:gRol,onChange:e=>setGRol(e.target.value),className:"w-full p-2 border rounded"},
-              React.createElement("option",{value:"Profesor"},"Profesor"),
-              React.createElement("option",{value:"AUXILIAR DE ASEO"},"AUXILIAR DE ASEO"),
-              React.createElement("option",{value:"MONITOR/A TALLER"},"MONITOR/A TALLER"),
-              React.createElement("option",{value:"BIBLIOTECARIO/A"},"BIBLIOTECARIO/A"),
-              React.createElement("option",{value:"SECRETARIO/A"},"SECRETARIO/A"),
-              React.createElement("option",{value:"INSPECTOR/A"},"INSPECTOR/A"),
-              React.createElement("option",{value:"CONTADOR/A"},"CONTADOR/A"),
-              React.createElement("option",{value:"OPERARIO"},"OPERARIO"),
-              React.createElement("option",{value:"PSICÓLOGO/A"},"PSICÓLOGO/A"),
-              React.createElement("option",{value:"ASISTENTE SOCIAL"},"ASISTENTE SOCIAL")
-            )
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Jornada"),
-            React.createElement("input",{type:"number",min:"1",max:"44",value:gJornada,onChange:e=>setGJornada(e.target.value),className:"w-full p-2 border rounded",required:true})
-          ),
-          React.createElement("div",{className:"md:col-span-5"},
-            React.createElement("button",{type:"submit",className:"px-4 py-2 bg-emerald-600 text-white rounded"},"Agregar / Actualizar")
-          )
-        ),
+        // Suscripciones
+        useEffect(()=>{
+          if(!db) return; // evita errores si no hay DB
+          const staffPath=`artifacts/${firebaseConfig.projectId}/staff`;
+          const permPath =`artifacts/${firebaseConfig.projectId}/permissions`;
+          const unsubStaff=db.collection(staffPath).onSnapshot(snap=>{
+            const arr=snap.docs.map(d=>({id:d.id,...d.data()}));
+            arr.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+            setStaff(arr);
+            setTimeout(()=>{ if(!staffId && arr.length) setStaffId(cleanRun(arr[0].run)); },0);
+          });
+          const unsubPerm=db.collection(permPath).onSnapshot(snap=>{
+            const arr=snap.docs.map(d=>({id:d.id,...d.data()}));
+            arr.sort((a,b)=> (a.timestamp||0)-(b.timestamp||0) );
+            setPerms(arr);
+          });
+          return ()=>{unsubStaff();unsubPerm();}
+        },[]);
 
-        staff.length===0
-          ? React.createElement("div",{className:"p-4 bg-yellow-50 border border-yellow-300 rounded"},
-              React.createElement("p",{className:"text-sm"},"No hay personal cargado.")
-            )
-          : React.createElement("div",null,
-              React.createElement("table",{className:"min-w-full divide-y"},
-                React.createElement("thead",{className:"bg-gray-50"},
-                  React.createElement("tr",null,
-                    React.createElement("th",{className:"px-3 py-2 text-left text-xs font-bold"},"RUN"),
-                    React.createElement("th",{className:"px-3 py-2 text-left text-xs font-bold"},"Nombre"),
-                    React.createElement("th",{className:"px-3 py-2 text-left text-xs font-bold"},"Rol"),
-                    React.createElement("th",{className:"px-3 py-2 text-left text-xs font-bold"},"Jornada"),
-                    React.createElement("th",{className:"px-3 py-2 text-right text-xs font-bold"},"Acciones")
+        const handleSave=async(e)=>{
+          e.preventDefault();
+          if(!db) return alert('BD no disponible');
+          if(!staffId||!date) return alert('Faltan campos');
+          const st=staff.find(s=>cleanRun(s.run)===staffId);
+          const payload={
+            staffId,
+            staffName: st?.nombre||'Desconocido',
+            date,
+            type,
+            duration: type==='hours'?Number(duration):null,
+            timeStart: type==='time-range'?tStart:null,
+            timeEnd:   type==='time-range'?tEnd:null,
+            reason,
+            isPaid,
+            leaveMaterial,
+            details,
+            timestamp: Date.now()
+          };
+          const currentSem = perms
+            .filter(p=>p.staffId===staffId && sameSemester(p.date, date))
+            .reduce((a,p)=>a+permHours(p),0);
+          const after = currentSem + permHours(payload);
+          if(currentSem>=16 || after>=16){
+            const m='⚠️ Ya usaste los permisos establecidos para este semestre (16 horas). Los próximos serán descontados. ⚠️';
+            alert(m); setAlertMsg(m);
+          } else { setAlertMsg(''); }
+
+          await db.collection(`artifacts/${firebaseConfig.projectId}/permissions`).add(payload);
+          setDate(todayLocal());setType('day');setDuration(1);setTStart('08:00');setTEnd('09:00');setReason('checkup');setIsPaid(true);setLeaveMaterial(false);setDetails('');
+        };
+
+        const handleUpdate=async(id, typeOfRow, patch)=>{
+          if(!db) return alert('BD no disponible');
+          if(!id) return;
+          await db.collection(`artifacts/${firebaseConfig.projectId}/permissions`).doc(id).update(patch);
+          setEdit(null);
+        };
+
+        const handleDelete=async(id)=>{
+          if(!db) return alert('BD no disponible');
+          if(confirm('¿Eliminar este permiso?')){
+            await db.collection(`artifacts/${firebaseConfig.projectId}/permissions`).doc(id).delete();
+          }
+        };
+
+        return React.createElement(Fragment,null,
+          React.createElement('div',{className:'max-w-6xl mx-auto p-6 bg-white rounded-xl shadow relative'},
+            React.createElement('div',{id:'errbar',className:'hidden absolute -top-3 left-4 right-4 bg-red-100 text-red-800 border border-red-400 rounded px-3 py-2 text-xs'},'') ,
+            React.createElement('div',{className:'flex items-center gap-4 mb-6'},
+              React.createElement('h1',{className:'text-3xl font-extrabold text-green-700'},'Control de Permisos'),
+              React.createElement('span',{className:'text-xs text-gray-500 ml-auto'},'Desarrollado por ProfeAle')
+            ),
+
+            React.createElement('div',{className:'mb-6 flex gap-2 border-b'},
+              ['registrar','resumen','gestion'].map(key=>
+                React.createElement('button',{
+                  key,
+                  onClick:()=>setTab(key),
+                  className:`px-4 py-2 rounded-t ${tab===key?'bg-green-100 text-green-800 border-t border-l border-r':'text-gray-600'}`
+                }, key==='registrar'?'Registrar':key==='resumen'?'Resumen':'Gestión')
+              )
+            ),
+
+            tab==='registrar' && React.createElement(Fragment,null,
+              alertMsg && React.createElement('div',{className:'bg-red-100 border border-red-500 text-red-700 p-3 rounded mb-4 text-center font-bold'},alertMsg),
+              React.createElement('form',{onSubmit:handleSave,className:'grid md:grid-cols-4 gap-4 items-end mb-8'},
+                React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'Funcionario'),
+                  React.createElement('select',{value:staffId,onChange:e=>setStaffId(e.target.value),className:'w-full border p-2 rounded'},
+                    staff.map(s=>React.createElement('option',{key:s.id,value:cleanRun(s.run)},`${s.nombre} (${s.rol||''})`))
                   )
                 ),
-                React.createElement("tbody",null,
-                  staff.map(s =>
-                    React.createElement("tr",{key:s.id,className:"border-t"},
-                      React.createElement("td",{className:"px-3 py-2"},s.run),
-                      React.createElement("td",{className:"px-3 py-2"},s.nombre),
-                      React.createElement("td",{className:"px-3 py-2"},s.rol),
-                      React.createElement("td",{className:"px-3 py-2"},s.jornada),
-                      React.createElement("td",{className:"px-3 py-2 text-right"},
-                        React.createElement("button",{className:"no-print px-2 py-1 rounded bg-red-600 text-white",onClick:()=>handleDeleteStaff(s.id, s.nombre)},"Eliminar")
+                React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'Fecha'),
+                  React.createElement('input',{type:'date',value:date,onChange:e=>setDate(e.target.value),className:'w-full border p-2 rounded'})
+                ),
+                React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'Tipo'),
+                  React.createElement('select',{value:type,onChange:e=>setType(e.target.value),className:'w-full border p-2 rounded'},
+                    React.createElement('option',{value:'day'},'Día completo (8h)'),
+                    React.createElement('option',{value:'half-day'},'Medio día (4h)'),
+                    React.createElement('option',{value:'hours'},'Por horas (manual)'),
+                    React.createElement('option',{value:'time-range'},'Por horas (rango)')
+                  )
+                ),
+                type==='hours' && React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'N° horas'),
+                  React.createElement('input',{type:'number',step:'0.5',min:'0.5',max:'8',value:duration,onChange:e=>setDuration(e.target.value),className:'w-full border p-2 rounded'})
+                ),
+                type==='time-range' && React.createElement(Fragment,null,
+                  React.createElement('div',null,
+                    React.createElement('label',{className:'block text-sm mb-1'},'Desde'),
+                    React.createElement('input',{type:'time',value:tStart,onChange:e=>setTStart(e.target.value),className:'w-full border p-2 rounded'})
+                  ),
+                  React.createElement('div',null,
+                    React.createElement('label',{className:'block text-sm mb-1'},'Hasta'),
+                    React.createElement('input',{type:'time',value:tEnd,onChange:e=>setTEnd(e.target.value),className:'w-full border p-2 rounded'})
+                  )
+                ),
+                React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'Motivo'),
+                  React.createElement('select',{value:reason,onChange:e=>setReason(e.target.value),className:'w-full border p-2 rounded'},
+                    React.createElement('option',{value:'checkup'},'Control médico'),
+                    React.createElement('option',{value:'other'},'Otro')
+                  )
+                ),
+                React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'Goce de sueldo'),
+                  React.createElement('select',{value:String(isPaid),onChange:e=>setIsPaid(e.target.value==='true'),className:'w-full border p-2 rounded'},
+                    React.createElement('option',{value:'true'},'Sí'),
+                    React.createElement('option',{value:'false'},'No')
+                  )
+                ),
+                React.createElement('div',null,
+                  React.createElement('label',{className:'block text-sm mb-1'},'Deja material'),
+                  React.createElement('select',{value:String(leaveMaterial),onChange:e=>setLeaveMaterial(e.target.value==='true'),className:'w-full border p-2 rounded'},
+                    React.createElement('option',{value:'true'},'Sí'),
+                    React.createElement('option',{value:'false'},'No')
+                  )
+                ),
+                React.createElement('div',{className:'md:col-span-4'},
+                  React.createElement('label',{className:'block text-sm mb-1'},'Detalles (opcional)'),
+                  React.createElement('input',{type:'text',value:details,onChange:e=>setDetails(e.target.value),className:'w-full border p-2 rounded'})
+                ),
+                React.createElement('div',{className:'md:col-span-4'},
+                  React.createElement('button',{type:'submit',className:'bg-green-600 text-white px-4 py-2 rounded'},'Guardar permiso')
+                )
+              ),
+
+              React.createElement('h2',{className:'text-lg font-semibold mb-2'},'Historial'),
+              perms.length===0
+                ? React.createElement('p',{className:'text-gray-500'},'No hay permisos aún.')
+                : React.createElement('table',{className:'min-w-full border text-sm'},
+                    React.createElement('thead',{className:'bg-gray-100'},
+                      React.createElement('tr',null,
+                        React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Funcionario'),
+                        React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Fecha'),
+                        React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Duración'),
+                        React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Horas'),
+                        React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Acumulado s/sem'),
+                        React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Motivo'),
+                        React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Goce'),
+                        React.createElement('th',{className:'px-3 py-2 text-left font-bold'},'Deja material'),
+                        React.createElement('th',{className:'px-3 py-2 text-right font-bold'},'Acciones')
+                      )
+                    ),
+                    React.createElement('tbody',null,
+                      perms.map(p=>
+                        React.createElement('tr',{key:p.id,className:'border-t'},
+                          React.createElement('td',{className:'px-3 py-2'},p.staffName),
+                          React.createElement('td',{className:'px-3 py-2'},p.date),
+                          React.createElement('td',{className:'px-3 py-2'},durLabel(p.type,p.duration,null,p.timeStart,p.timeEnd)),
+                          React.createElement('td',{className:'px-3 py-2'}, numberFmt(permHours(p))+' h'),
+                          React.createElement('td',{className:'px-3 py-2'}, numberFmt(semHoursAccum(perms,p))+' h'),
+                          React.createElement('td',{className:'px-3 py-2'},p.reason==='checkup'?'Control médico':'Otro'),
+                          React.createElement('td',{className:'px-3 py-2'},p.isPaid?'Sí':'No'),
+                          React.createElement('td',{className:'px-3 py-2'},p.leaveMaterial?'Sí':'No'),
+                          React.createElement('td',{className:'px-3 py-2 text-right flex gap-2 justify-end'},
+                            React.createElement('button',{className:'px-2 py-1 rounded bg-blue-600 text-white',onClick:()=>setEdit(p)},'Editar'),
+                            React.createElement('button',{className:'px-2 py-1 rounded bg-indigo-600 text-white',onClick:()=>setPrintVoucher(p)},'Imprimir voucher'),
+                            React.createElement('button',{className:'px-2 py-1 rounded bg-red-600 text-white',onClick:()=>handleDelete(p.id)},'Eliminar')
+                          )
+                        )
                       )
                     )
                   )
-                )
-              )
-            )
-      )
-    );
-
-    /* MODAL EDITAR + VOUCHER */
-    const editModal = edit && React.createElement("div",{className:"fixed inset-0 bg-black/60 z-50 flex items-center justify-center"},
-      React.createElement("div",{className:"bg-white rounded-xl shadow p-6 w-full max-w-2xl"},
-        React.createElement("div",{className:"flex justify-between items-center mb-4"},
-          React.createElement("h3",{className:"font-bold text-lg"},"Editar permiso"),
-          React.createElement("button",{className:"no-print text-gray-500",onClick:()=>setEdit(null)},"✕")
-        ),
-        React.createElement("div",{className:"grid md:grid-cols-2 gap-3"},
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Funcionario"),
-            React.createElement("select",{value:edit.staffId,onChange:e=>{const s=staff.find(x=>cleanRun(x.run)===e.target.value);setEdit({...edit,staffId:e.target.value,staffName:s?.nombre||edit.staffName});},className:"w-full p-2 border rounded"},
-              staff.map(s=>React.createElement("option",{key:s.id,value:cleanRun(s.run)},`${s.nombre} (${s.rol})`))
-            )
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Fecha"),
-            React.createElement("input",{type:"date",value:edit.date||todayLocal(),onChange:e=>setEdit({...edit,date:e.target.value}),className:"w-full p-2 border rounded"})
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Tipo"),
-            React.createElement("select",{value:edit.type||"day",onChange:e=>setEdit({...edit,type:e.target.value}),className:"w-full p-2 border rounded"},
-              React.createElement("option",{value:"day"},"Día completo"),
-              React.createElement("option",{value:"half-day"},"Medio día"),
-              React.createElement("option",{value:"hours"},"Por horas (manual)"),
-              React.createElement("option",{value:"time-range"},"Por horas (rango)")
-            )
-          ),
-          (edit.type==="hours") && React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"N° Horas"),
-            React.createElement("input",{type:"number",step:"0.5",min:"0.5",max:"8",value:edit.duration||1,onChange:e=>setEdit({...edit,duration:e.target.value}),className:"w-full p-2 border rounded"})
-          ),
-          (edit.type==="time-range") && React.createElement(Fragment,null,
-            React.createElement("div",null,
-              React.createElement("label",{className:"block text-sm mb-1"},"Desde"),
-              React.createElement("input",{type:"time",value:edit.timeStart||"08:00",onChange:e=>setEdit({...edit,timeStart:e.target.value}),className:"w-full p-2 border rounded"})
             ),
-            React.createElement("div",null,
-              React.createElement("label",{className:"block text-sm mb-1"},"Hasta"),
-              React.createElement("input",{type:"time",value:edit.timeEnd||"09:00",onChange:e=>setEdit({...edit,timeEnd:e.target.value}),className:"w-full p-2 border rounded"})
-            )
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Motivo"),
-            React.createElement("select",{value:edit.reason||"checkup",onChange:e=>setEdit({...edit,reason:e.target.value}),className:"w-full p-2 border rounded"},
-              React.createElement("option",{value:"checkup"},"Control médico"),
-              React.createElement("option",{value:"other"},"Otro")
-            )
-          ),
-          React.createElement("div",null,
-            React.createElement("label",{className:"block text-sm mb-1"},"Goce de sueldo"),
-            React.createElement("select",{value:String(edit.isPaid),onChange:e=>setEdit({...edit,isPaid:e.target.value==='true'}),className:"w-full p-2 border rounded"},
-              React.createElement("option",{value:"true"},"Sí"),
-              React.createElement("option",{value:"false"},"No")
-            )
-          ),
-          React.createElement("div",{className:"md:col-span-2"},
-            React.createElement("label",{className:"block text-sm mb-1"},"Detalles"),
-            React.createElement("input",{type:"text",value:edit.details||"",onChange:e=>setEdit({...edit,details:e.target.value}),className:"w-full p-2 border rounded"})
+
+            tab==='resumen' && React.createElement(Resumen,{perms:perms,staff:staff}),
+
+            tab==='gestion' && React.createElement(GestionPersonal,null),
+
+            printVoucher && React.createElement(Voucher,{permission:printVoucher,staffList:staff,allPerms:perms,onClose:()=>setPrintVoucher(null)}),
+
+            edit && React.createElement(EditModal,{edit,onSave:handleUpdate,onCancel:()=>setEdit(null)})
           )
-        ),
-        React.createElement("div",{className:"mt-4 flex justify-end gap-2"},
-          React.createElement("button",{className:"px-3 py-2 bg-gray-300 rounded",onClick:()=>setEdit(null)},"Cancelar"),
-          React.createElement("button",{className:"px-3 py-2 bg-green-600 text-white rounded",onClick:handleUpdate},"Guardar")
-        )
-      )
-    );
+        );
+      }
 
-    const voucherUI = printVoucher && React.createElement(Voucher,{
-      permission: printVoucher,
-      staffList: staff,
-      allPerms: perms,
-      folio: folio,
-      onClose: ()=>{ setPrintVoucher(null); setFolio(""); }
-    });
+      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+    };
 
-    return React.createElement(Fragment,null, mainUI, editModal, voucherUI);
-  }
-
-  // Render
-  try {
-    const root = document.getElementById('root');
-    ReactDOM.createRoot(root).render(React.createElement(App,null));
-  } catch(e) {
-    document.getElementById('root').innerHTML =
-      '<div style="padding:16px" class="text-red-700">Error crítico al montar la app: '+(e?.message||e)+'</div>';
-  }
-})();
+    if (document.readyState === 'complete' || document.readyState === 'interactive') boot();
+    else document.addEventListener('DOMContentLoaded', boot);
+  })();
   </script>
+
+  <footer class="text-center text-xs text-gray-500 py-4">Desarrollado por ProfeAle</footer>
 </body>
 </html>
