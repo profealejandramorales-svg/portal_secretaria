@@ -3,459 +3,362 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Certificados</title>
+    <title>Certificados 2026 - Escuela Agrícola</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <style>
-        body {
-            font-family: 'Times New Roman', Times, serif; 
-            background-color: #f3f4f6;
+        body { font-family: 'Times New Roman', serif; background-color: #f3f4f6; }
+        
+        /* HOJA CARTA ESTÁNDAR */
+        .certificate-page { 
+            position: relative; 
+            width: 216mm; 
+            min-height: 279mm; 
+            padding: 25mm 20mm; 
+            background: white;
+            margin: 0 auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 12pt; 
+            line-height: 1.5;
         }
         
-        /* Contenedor en pantalla */
-        .certificate-container {
-            background: white;
-            padding: 3rem; /* Margen interno en pantalla */
-            border-radius: 5px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            max-width: 21.59cm; /* Ancho carta */
-            margin: 0 auto;
-            min-height: 27.94cm; /* Alto carta */
-            position: relative;
-        }
-
-        /* CONFIGURACIÓN DE IMPRESIÓN (ESTRICTA 1 PLANA) */
+        /* SIN MARCA DE AGUA */
+        
+        .tab-button.active { background-color: #15803d; color: white; }
+        
+        /* IMPRESIÓN LIMPIA */
         @media print {
-            @page {
-                size: letter;
-                margin: 1.5cm; /* Margen físico de la hoja */
+            body * { visibility: hidden; }
+            #certificate-container, #certificate-container * { visibility: visible; }
+            #certificate-container { 
+                position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; 
+                border: none; box-shadow: none; 
             }
-            body {
-                background-color: white;
-                margin: 0;
-                padding: 0;
-                -webkit-print-color-adjust: exact;
-            }
-            .no-print {
-                display: none !important;
-            }
-            .certificate-container {
-                width: 100%;
-                max-width: 100%;
-                margin: 0;
-                padding: 0; 
-                box-shadow: none;
-                border: none;
-            }
-            /* Evitar cortes de página dentro de elementos */
-            div, p, img {
-                break-inside: avoid;
-            }
+            .no-print { display: none !important; }
+            @page { size: letter; margin: 0; }
         }
     </style>
 </head>
-<body class="p-6">
-
-    <header class="max-w-2xl mx-auto text-center mb-6 no-print font-sans">
-        <h1 class="text-3xl font-bold text-blue-900 mb-1">
-            <i class="fa-solid fa-print mr-2"></i>Generador de Certificados
-        </h1>
-        <p class="text-blue-600 text-sm">Escuela Agrícola Sagrados Corazones</p>
-    </header>
-
-    <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 font-sans">
+<body class="p-4 sm:p-8 font-sans">
+    <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-2xl overflow-hidden no-print">
         
-        <div class="lg:col-span-4 no-print space-y-4">
-            
-            <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <label class="block text-xs font-bold text-blue-800 uppercase mb-1">Año del Certificado</label>
-                <select id="year-select" class="w-full p-2 border border-blue-300 rounded text-sm font-bold text-blue-900">
-                    <option value="2025" selected>2025 (Año Actual)</option>
-                    <option value="2026">2026 (Promoción Automática)</option>
-                </select>
+        <header class="bg-green-800 text-white p-5 text-center shadow-md flex items-center justify-center gap-4">
+            <img src="logo.jpg" alt="Logo" class="h-16 bg-white rounded-full p-1">
+            <div>
+                <h1 class="text-2xl font-bold font-sans">Generador de Certificados</h1>
+                <p class="text-green-200 text-xs font-sans">Sistema Integrado de Gestión Escolar</p>
             </div>
+        </header>
 
-            <div class="bg-white p-5 rounded-lg shadow border border-gray-200">
-                <h2 class="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Datos del Estudiante</h2>
+        <div class="flex border-b border-gray-200 bg-gray-50">
+            <button class="tab-button active flex-1 py-3 font-bold text-gray-600 hover:bg-green-50 transition font-sans" onclick="switchTab('generator')">
+                📄 Emitir Documento
+            </button>
+            <button class="tab-button flex-1 py-3 font-bold text-gray-600 hover:bg-green-50 transition font-sans" onclick="switchTab('manage')">
+                👥 Gestión y Datos
+            </button>
+        </div>
 
-                <div class="space-y-3">
+        <div id="tab-generator" class="p-6 sm:p-8 font-sans">
+            <div class="bg-green-50 rounded-lg p-5 border border-green-100 mb-6 shadow-sm">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-xs font-semibold text-gray-600 mb-1">Curso</label>
-                        <select id="course-select" class="w-full p-2 border rounded text-sm bg-gray-50">
-                            <option value="">Cargando cursos...</option>
+                        <label class="block text-xs font-bold text-green-800 uppercase mb-1">1. Año Académico</label>
+                        <select id="year-select" class="w-full p-2 border rounded font-bold text-green-900 text-sm" onchange="resetSelection()">
+                            <option value="2025">2025 (Actual)</option>
+                            <option value="2026" selected>2026 (Próximo)</option>
                         </select>
                     </div>
-
                     <div>
-                        <label class="block text-xs font-semibold text-gray-600 mb-1">Alumno</label>
-                        <select id="student-select" disabled class="w-full p-2 border rounded text-sm bg-gray-100">
-                            <option value="">Seleccione un curso primero</option>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">2. Curso Base (2025)</label>
+                        <select id="course-select" class="w-full p-2 border rounded text-sm" onchange="loadStudentsByCourse()">
+                            <option value="">Cargando...</option>
                         </select>
                     </div>
-
-                    <div id="action-buttons" class="hidden pt-2 grid grid-cols-1 gap-2">
-                        <button onclick="generateCertificate('regular')" class="w-full py-2 bg-blue-600 text-white rounded text-sm font-bold hover:bg-blue-700">
-                            Generar Alumno Regular
-                        </button>
-                        <button onclick="generateCertificate('matricula')" class="w-full py-2 bg-white text-blue-600 border border-blue-600 rounded text-sm font-bold hover:bg-blue-50">
-                            Generar Matrícula
-                        </button>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">3. Estudiante</label>
+                        <select id="student-select" class="w-full p-2 border rounded disabled:bg-gray-100 text-sm" disabled onchange="selectStudent()">
+                            <option value="">← Seleccione curso</option>
+                        </select>
                     </div>
                 </div>
             </div>
-            
-            <div class="text-center">
-                <a href="portal_secretaria.html" class="text-xs text-gray-500 hover:text-blue-600 font-bold"><i class="fa-solid fa-arrow-left"></i> Volver al Portal</a>
-            </div>
-        </div>
 
-        <div class="lg:col-span-8">
-            <div id="preview-container" class="hidden">
-                <div class="bg-gray-800 text-white p-2 rounded-t-lg flex justify-between items-center no-print">
-                    <span class="text-xs font-bold px-2">Vista Previa (Tamaño Carta)</span>
-                    <button onclick="window.print()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-bold transition">
-                        <i class="fa-solid fa-print mr-1"></i> IMPRIMIR
+            <div id="action-zone" class="hidden">
+                <div class="flex items-center justify-between bg-white border border-gray-200 p-4 rounded-lg mb-6 shadow-sm">
+                    <div>
+                        <h3 class="text-md font-bold text-gray-800"><span id="display-name" class="text-green-700"></span></h3>
+                        <p class="text-xs text-gray-500 font-mono mt-1">RUT: <span id="display-rut" class="font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">--</span></p>
+                    </div>
+                    <div class="text-right">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase">CURSO A CERTIFICAR</label>
+                        <input type="text" id="final-course-input" class="w-20 text-center font-bold border-b border-green-500 focus:outline-none text-lg text-gray-800 bg-transparent" value="">
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-3 justify-center">
+                    <button onclick="generateCertificate('regular')" class="px-5 py-2.5 bg-green-600 text-white font-bold rounded shadow hover:bg-green-700 text-sm transition">
+                        🎓 Alumno Regular
+                    </button>
+                    <button onclick="generateCertificate('matricula')" class="px-5 py-2.5 bg-yellow-600 text-white font-bold rounded shadow hover:bg-yellow-700 text-sm transition">
+                        📝 Certificado Matrícula
                     </button>
                 </div>
-
-                <div id="certificate-content"></div>
-            </div>
-
-            <div id="initial-placeholder" class="h-96 flex flex-col items-center justify-center bg-white rounded-lg border-2 border-dashed border-gray-300 text-center no-print">
-                <i class="fa-solid fa-file-pdf text-4xl text-gray-300 mb-3"></i>
-                <p class="text-gray-400 text-sm">Selecciona un alumno para<br>generar el documento.</p>
             </div>
         </div>
 
-    </main>
+        <div id="tab-manage" class="hidden p-6 sm:p-8 bg-gray-50 font-sans">
+            <div class="max-w-2xl mx-auto space-y-6">
+                <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                    <h3 class="text-md font-bold text-gray-800 mb-3">➕ Ingresar Alumno Nuevo</h3>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div><label class="text-xs font-bold text-gray-500">Curso Actual</label><input type="text" id="new-course" placeholder="Ej: 1A" class="w-full p-2 border rounded uppercase text-sm"></div>
+                        <div><label class="text-xs font-bold text-gray-500">RUT</label><input type="text" id="new-rut" placeholder="12345678-9" class="w-full p-2 border rounded uppercase text-sm"></div>
+                    </div>
+                    <div class="mb-3"><label class="text-xs font-bold text-gray-500">Nombre Completo (Apellidos Nombres)</label><input type="text" id="new-name" placeholder="PEREZ LOPEZ, JUAN" class="w-full p-2 border rounded uppercase text-sm"></div>
+                    <button onclick="addStudentToDB()" class="w-full py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 text-sm">Guardar en Base de Datos</button>
+                </div>
+
+                <div class="bg-red-50 p-5 rounded-lg border border-red-200">
+                    <h3 class="text-md font-bold text-red-800 mb-1">⚠️ Carga Masiva de Nómina</h3>
+                    <p class="text-xs text-red-600 mb-3">Si los datos están incompletos, usa este botón. <strong>Borrará todos los alumnos actuales</strong> y cargará la lista oficial completa con RUTs.</p>
+                    <button onclick="fullDatabaseReset()" class="w-full py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700 text-sm flex justify-center items-center gap-2">
+                        🗑️ BORRAR Y CARGAR NÓMINA OFICIAL (CON RUTS)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="certificate-container" class="hidden mt-8 mb-10 shadow-lg mx-auto w-fit">
+        <div id="certificate-content"></div>
+        <div class="no-print text-center py-4 bg-gray-100 border-t">
+            <button onclick="window.print()" class="px-6 py-2 bg-gray-800 text-white font-bold rounded shadow hover:bg-black text-sm">
+                🖨️ Imprimir
+            </button>
+            <button onclick="document.getElementById('certificate-container').classList.add('hidden')" class="ml-4 px-4 py-2 text-gray-500 text-sm underline hover:text-red-500">
+                Cerrar Vista
+            </button>
+        </div>
+    </div>
 
     <script>
-        // BASE DE DATOS COMPLETA (2025)
-        const RAW_DATA = [
-            ['1A', '23376817-0', 'EMILYA', 'ANTONIA', 'ALBURQUENQUE', 'DEL GRECO'],
-            ['1A', '22922460-3', 'BENJAMÍN', 'NICOLÁS', 'ANABALÓN', 'BELTRÁN'],
-            ['1A', '23355953-9', 'HADEEY', 'ALEJANDRA', 'CONTRERAS', 'SALGADO'],
-            ['1A', '23560082-k', 'AGUSTÍN', 'ALEXIS', 'FERRADA', 'ALBORNOZ'],
-            ['1A', '23644472-4', 'FERNANDA', 'MAGDALENA', 'IBÁÑEZ', 'GONZÁLEZ'],
-            ['1A', '23389072-3', 'ALEXANDRA', 'DANAE', 'LAGOS', 'LASTRA'],
-            ['1A', '23498596-5', 'LUCIANO', 'ANTONIO', 'LÓPEZ', 'LÓPEZ'],
-            ['1A', '23396870-6', 'ANTONELLA', 'BELÉN', 'MALDONADO', 'FLORES'],
-            ['1A', '22793858-7', 'IGNACIO', 'ANTONIO', 'MARIN', 'MARÍN'],
-            ['1A', '23548214-2', 'VALESKA', 'BELÉN', 'MONTECINO', 'DÍAZ'],
-            ['1A', '23366642-4', 'LUIS', 'GABRIEL', 'MUÑOZ', 'CONTRERAS'],
-            ['1A', '23622121-0', 'ROGER', 'JOEL', 'MUÑOZ', 'LUNA'],
-            ['1A', '23329866-2', 'KARLA', 'PAZ', 'NAVARRO', 'VILLANUEVA'],
-            ['1A', '23388136-8', 'SEBASTIÁN', 'ANDRÉS', 'ORELLANA', 'ARRIAGADA'],
-            ['1A', '23640108-1', 'FELIPE', 'ALONSO', 'QUEZADA', 'NARANJO'],
-            ['1A', '23529637-3', 'FERNANDA', 'FLORENCIA', 'QUINTEROS', 'VERGARA'],
-            ['1A', '23534317-7', 'DUVAN', 'EMILIO', 'RAMÍREZ', 'VILLALOBOS'],
-            ['1A', '23679554-3', 'MARÍA', 'JOSÉ', 'SANTANDER', 'LÓPEZ'],
-            ['1A', '23631475-8', 'JEANFRANCO', 'PATRICK', 'TAPIA', 'CASTILLA'],
-            ['1A', '23007625-1', 'FRANCHESCA', 'POULETTE', 'URBINA', 'CÁCERES'],
-            ['1A', '23584521-0', 'AMANDA', 'ISABEL', 'VÁSQUEZ', 'ZALDUENDO'],
-            ['1A', '23404221-1', 'DAMIÁN', 'ANDRÉS', 'ZABALAGA', 'COFRÉ'],
-            ['1A', '23461777-k', 'LUKAS', 'ALFONSO', 'BAEZ', 'DONOSO'],
-            ['1A', '23032545-6', 'GONZALO', 'IGNACIO', 'MESA', 'DÍAZ'],
-            ['1B', '23367234-3', 'NOEMÍ', 'DE JESÚS', 'ARAVENA', 'ZÚÑIGA'],
-            ['1B', '22826488-1', 'CRISTÓBAL', 'ANTONIO', 'ASTUDILLO', 'CAMPOS'],
-            ['1B', '23251746-8', 'BRUNO', 'FERNANDO', 'ASTUDILLO', 'VÁSQUEZ'],
-            ['1B', '23545428-9', 'CATALINA', 'ANDREA', 'CUMINAO', 'VIDAL'],
-            ['1B', '23224652-9', 'MIGUEL', 'ALBERTO', 'DÍAZ', 'MALUENDA'],
-            ['1B', '23337375-3', 'DIDIER', 'EZEQUIEL', 'KILTAN', 'GONZÁLEZ'],
-            ['1B', '23355954-7', 'MARCO', 'EMILIO', 'LÓPEZ', 'ACUÑA'],
-            ['1B', '23153879-8', 'EYDAN', 'DAMIÁN', 'LÓPEZ', 'NOVOA'],
-            ['1B', '20760552-2', 'FABIÁN', 'FELIPE', 'MÉNDEZ', 'SUAZO'],
-            ['1B', '23391772-9', 'MATEO', 'ANTONIO', 'MOYA', 'REYES'],
-            ['1B', '23432193-5', 'VALENTINA', 'ABIGAIL', 'OSES', 'CAMPOS'],
-            ['1B', '23190411-5', 'ANTONELLA', 'FRANCISCA', 'PALMA', 'ORELLANA'],
-            ['1B', '23605196-K', 'MONSERRAT', 'ALAMIRA', 'PEREIRA', 'ORELLANA'],
-            ['1B', '23415461-3', 'ZADKA', 'ALEJANDRA', 'PÉREZ', 'ORMAZÁBAL'],
-            ['1B', '23290841-6', 'FLORENCIA', 'TRINIDAD', 'ROJAS', 'GONZÁLEZ'],
-            ['1B', '23264828-7', 'EDUARDO', 'JAVIER', 'ROJAS', 'LEIVA'],
-            ['1B', '22763630-0', 'SCARLET', 'NICOLE', 'VÁSQUEZ', 'AGUILERA'],
-            ['1B', '23616701-1', 'BRAYAN', 'DAMIÁN', 'YÁÑEZ', 'GONZÁLEZ'],
-            ['1B', '23555453-4', 'MARTINA', 'SAYEN', 'VARGAS', 'MORAGA'],
-            ['1B', '23301500-8', 'PEDRO', 'JOSÉ', 'SALAZAR', 'SALAS'],
-            ['1B', '23296637-8', 'FLORENCIA', 'ANTONIA', 'VERA', 'BRAVO'],
-            ['1B', '23479449-3', 'CONSTANZA', 'TRINIDAD', 'PÉREZ', 'QUEVEDO'],
-            ['1B', '23112966-9', 'BENJAMÍN', 'ALONSO', 'RIQUELME', 'SANTOS'],
-            ['2A', '23006149-1', 'TRINIDAD', 'BELÉN', 'AHUMADA', 'ROJAS'],
-            ['2A', '23090163-5', 'FERNANDA', 'ELENA', 'ESPINOSA', 'TORRES'],
-            ['2A', '23236242-1', 'BRAYAN', 'JESÚS', 'ESPINOZA', 'PEÑALILLO'],
-            ['2A', '23121508-5', 'EMILIA', 'CATALINA', 'GONZÁLEZ', 'SALAZAR'],
-            ['2A', '23132468-2', 'LEÓN', 'IGNACIO', 'MEDEL', 'OJEDA'],
-            ['2A', '22617512-1', 'ALFONSO', 'TOMÁS', 'MORALES', 'REIMÁN'],
-            ['2A', '23054557-K', 'MAXIMILIANO', 'EDUARDO', 'PEREIRA', 'HORMAZÁBAL'],
-            ['2A', '23029359-7', 'JORDÁN', 'AMARO', 'PINTO', 'TOBAR'],
-            ['2A', '23086976-6', 'KEVIN', 'ANDRÉS', 'RECABAL', 'YÁÑEZ'],
-            ['2A', '23284002-1', 'MATÍAS', 'EDUARDO', 'RIQUELME', 'CASTILLO'],
-            ['2A', '23141589-0', 'CONSTANZA', 'VICTORIA', 'RIVERA', 'ABARZA'],
-            ['2A', '23294557-5', 'TEIVA', 'SCARLETT', 'SANTIS', 'CASSEUS'],
-            ['2A', '22912548-6', 'KATHERINNE', 'ALEXIA', 'SOBARZO', 'YÉVENES'],
-            ['2A', '23209204-1', 'ANTONELLA', 'INES', 'TOLEDO', 'ALBORNOZ'],
-            ['2A', '23115030-7', 'ANTONIA', 'EDITH', 'VENEGAS', 'ARRIAGADA'],
-            ['2A', '23146366-6', 'JOAN', 'MANUEL', 'VIELMA', 'ZABALAGA'],
-            ['2A', '23255825-3', 'ANGEL', 'BLAS', 'MEZA', 'COLIMÁN'],
-            ['2A', '23164383-4', 'FLORENCIA', 'ALEJANDRA', 'SAAVEDRA', 'BRAVO'],
-            ['2B', '22927087-7', 'ALEX', 'FABIÁN', 'ARAYA', 'DOMÍNGUEZ'],
-            ['2B', '23099931-7', 'ALEX', 'JOHAN', 'BRAVO', 'MENARES'],
-            ['2B', '23200990-K', 'BENJAMÍN', 'IGNACIO', 'CARRASCO', 'LEIVA'],
-            ['2B', '23086622-8', 'CONSTANZA', 'PRISILA', 'CARVAJAL', 'URRUTIA'],
-            ['2B', '23194660-8', 'DIEGO', 'BENJAMÍN', 'ENCINA', 'PIZARRO'],
-            ['2B', '23229539-2', 'ALEJANDRO', 'ANTONIO', 'FAÚNDEZ', 'NORAMBUENA'],
-            ['2B', '22827535-2', 'EMILIO', 'SCOTT', 'JARAMILLO', 'VILLAR'],
-            ['2B', '23321258-K', 'MARTÍN', 'ALONSO', 'LÓPEZ', 'VILLAR'],
-            ['2B', '23285276-3', 'ALEXANDRA', 'JAVIERA', 'MIRANDA', 'MUÑOZ'],
-            ['2B', '22459961-7', 'HÉCTOR', 'ANTONIO', 'MUÑOZ', 'TRONCOSO'],
-            ['2B', '23097156-0', 'ALONSO', 'IGNACIO', 'OLIVARES', 'VALENZUELA'],
-            ['2B', '22804086-k', 'ANTONELLA', 'DANAE', 'OLIVARES', 'VALENZUELA'],
-            ['2B', '22876195-8', 'MATÍAS', 'LEANDRO', 'ORELLANA', 'GARRIDO'],
-            ['2B', '23113000-4', 'MILLARAY', 'ANGÉLICA', 'PUNOY', 'MEDEL'],
-            ['2B', '23118361-2', 'CRISTÓBAL', 'PATRICIO', 'QUIÑENAO', 'MUÑOZ'],
-            ['2B', '23244598-K', 'DALIA', 'CONSTANZA', 'RIQUELME', 'COLOMA'],
-            ['2B', '23304433-4', 'VICENTE', 'MOISÉS', 'SALGADO', 'ROJAS'],
-            ['2B', '22922664-9', 'VICENTE', 'ESTEBAN', 'SANDOVAL', 'CERPA'],
-            ['2B', '23230279-8', 'CHRISTOPHER', '', 'SOTO', 'NARANJO'],
-            ['2B', '22907717-1', 'MARTÍN', '', 'VEKARIC', 'VERDEJO'],
-            ['3A', '22717035-2', 'MARTINA', 'ALEJANDRA', 'ALCÁNTAR', 'GARCÍA'],
-            ['3A', '22202028-K', 'ARIEL', 'LEON', 'BAHAMONDE', 'MUÑOZ'],
-            ['3A', '22932851-4', 'CRISTOPHER', 'JESÚS', 'CAMPOS', 'MUÑOZ'],
-            ['3A', '22587064-0', 'VICENTE', 'GASPAR', 'CANCINO', 'ORÓSTICA'],
-            ['3A', '22935345-4', 'CAMILA', 'ANDREA', 'CARRASCO', 'GONZÁLEZ'],
-            ['3A', '22852052-7', 'ANTONIO', 'ANDRÉS', 'COFRÉ', 'CASTILLO'],
-            ['3A', '22542992-8', 'BELÉN', 'ALEJANDRA', 'CONTRERAS', 'VENEGAS'],
-            ['3A', '22897408-0', 'FELIPE', 'ESTEBAN', 'GALDAMES', 'VERGARA'],
-            ['3A', '22152106-4', 'SANTIAGO', 'HUMBERTO', 'GARCÍA', 'GONZÁLEZ'],
-            ['3A', '22820588-5', 'FRANCISCA', 'IGNACIA', 'GONZÁLEZ', 'AMIGO'],
-            ['3A', '22565627-4', 'JOAQUÍN', 'ALONSO', 'GONZÁLEZ', 'SALAZAR'],
-            ['3A', '22808692-4', 'ANGEL', 'MARTÍN', 'GUTIÉRREZ', 'GUTIÉRREZ'],
-            ['3A', '22970003-0', 'AARON', 'ALEJANDRO', 'MARTÍNEZ', 'LIZANA'],
-            ['3A', '22482618-4', 'BENJAMÍN', 'INTI', 'MEZA', 'CARRASCO'],
-            ['3A', '22858572-6', 'CATALINA', 'ANDREA', 'MIÑO', 'GONZALEZ'],
-            ['3A', '22932822-0', 'RENATO', 'IGNACIO', 'MORAGA', 'PACHECO'],
-            ['3A', '22839912-4', 'MANUEL', 'IGNACIO', 'PÉREZ', 'CORÓN'],
-            ['3A', '100710921-7', 'JAKSON', 'FERGIE', 'SAMANIEGO', 'CORTEZ'],
-            ['3A', '22889391-9', 'SOFÍA', 'ANTONIA', 'SEPÚLVEDA', 'SALAZAR'],
-            ['3A', '22709426-5', 'GABRIEL', 'ANTONIO', 'TAPIA', 'ACUÑA'],
-            ['3A', '23022549-4', 'CRISTÓBAL', 'ANTONIO', 'VEGA', 'VIVANCO'],
-            ['3A', '22903476-6', 'DANIELA', 'ELIZABETH', 'VERA', 'NAVARRETE'],
-            ['3A', '22792420-9', 'KARINA', 'ANGELINA', 'VILLALOBOS', 'ARAVENA'],
-            ['3A', '22733377-4', 'SAMIR', 'LUCIAN', 'VILLALOBOS', 'VILLALOBOS'],
-            ['3A', '22644932-9', 'VICENTE', 'ALEJANDRO', 'HERNÁNDEZ', 'SEPÚLVEDA'],
-            ['3A', '100793606-7', 'FLORVELIS', 'DE LOS ANGELES', 'TORREALBA', 'MOYA'],
-            ['3A', '23038091-0', 'CONSUELO', 'ANTONIA', 'CARO', 'URRUTIA'],
-            ['3A', '22448022-9', 'ANTONIA', 'PAZ', 'LOBOS', 'CÁCERES'],
-            ['3C', '22558171-1', 'MARTÍN', 'ANTONIO', 'ARELLANO', 'ACUÑA'],
-            ['3C', '22897577-K', 'DAYANA', 'IGNACIA', 'AROS', 'ÁVILA'],
-            ['3C', '22339310-1', 'MARÍA', 'GRACIA', 'CABRERA', 'COLOMBINO'],
-            ['3C', '22865819-7', 'YARIXA', 'ALEJANDRA', 'FUENTES', 'CARRASCO'],
-            ['3C', '22971225-K', 'DANIELA', 'ALEJANDRA', 'GÓMEZ', 'CANCINO'],
-            ['3C', '22698950-1', 'MILLARAY', 'CAROLINA', 'GUTIÉRREZ', 'CARRIÓN'],
-            ['3C', '22665539-5', 'GLORIA', 'JAVIERA', 'HONORATO', 'TAPIA'],
-            ['3C', '22907525-K', 'BENJAMÍN', 'ESTEBAN', 'LARA', 'RIVERA'],
-            ['3C', '22801082-0', 'JOSÉ', 'TOMÁS', 'PALACIOS', 'SOTO'],
-            ['3C', '22477831-7', 'JOSÉ', 'CRISTÓBAL', 'PEZO', 'SANTANDER'],
-            ['3C', '22796354-9', 'JOSÉ', 'PABLO', 'ROCHA', 'ROJAS'],
-            ['3C', '22876139-7', 'FABIANA', 'ISIDORA', 'ROJAS', 'YÉVENES'],
-            ['3C', '22916573-9', 'ANDY', 'ANTONIO', 'SÁNCHEZ', 'PAREJA'],
-            ['3C', '22845486-9', 'SIMÓN', 'ESTEBAN', 'SANTANDER', 'LÓPEZ'],
-            ['3C', '23004590-9', 'SIOMARA', 'IGNACIA', 'TRONCOSO', 'LIZAMA'],
-            ['3C', '23009921-9', 'LUCIANA', 'BERNABELA', 'WARNKEN', 'ROJAS'],
-            ['3C', '22783846-9', 'FRANCO', 'SEBASTIÁN', 'DE LA HOZ', 'VALENZUELA'],
-            ['3C', '23048274-8', 'ANAÍS', 'VALENTINA', 'COLLAO', 'MEDINA'],
-            ['4A', '22445092-3', 'HOMERO', 'ALEXANDER', 'AGURTO', 'CRESPO'],
-            ['4A', '22051153-7', 'CATALINA', 'BELEN', 'ANDIA', 'DE LA HOZ'],
-            ['4A', '22269531-7', 'ESTEBAN', 'ALEXANDER', 'FUENTES', 'GONZÁLEZ'],
-            ['4A', '22554952-4', 'SOFÍA', 'ELENA', 'GARCÍA', 'ROJAS'],
-            ['4A', '22652303-0', 'ANTONELLA', 'CONSTANZA', 'GODOY', 'HERRERA'],
-            ['4A', '22312159-4', 'KEVIN', 'ALEJANDRO', 'GONZÁLEZ', 'CASTRO'],
-            ['4A', '22386223-3', 'PÍA', 'IGNACIA', 'MARCHANT', 'MORÁN'],
-            ['4A', '22533366-1', 'MARTÍN', 'ALAN', 'QUINTANA', 'SAN MARTÍN'],
-            ['4A', '22432358-1', 'CRISTOFER', 'BASTIÁN', 'RECABAL', 'YÁÑEZ'],
-            ['4A', '22293250-5', 'GABRIEL', 'ANTONIO', 'ROJAS', 'GONZÁLEZ'],
-            ['4A', '22451297-K', 'ESPERANZA', 'BELÉN', 'TOLEDO', 'MUÑOZ'],
-            ['4A', '22665848-3', 'FRANCISCA', 'ALEJANDRA', 'YÁÑEZ', 'GONZÁLEZ'],
-        ];
-
-        // CONSTANTES
+        // CONFIGURACIÓN
+        const firebaseConfig = { apiKey: "AIzaSyBnSMVCH0yyYUWk5z54kTIPTrWkyoeWs-I", authDomain: "suspenciones-40d0c.firebaseapp.com", projectId: "suspenciones-40d0c", storageBucket: "suspenciones-40d0c.firebasestorage.app", messagingSenderId: "853418739042", appId: "1:853418739042:web:d051befb99cd2acdd4583b", measurementId: "G-L00J7XN6Y1" };
+        
+        // DATOS INSTITUCIONALES
         const SCHOOL_NAME = "Escuela Agrícola Sagrados Corazones"; 
         const LOCATION = "Villa Alegre";
         const DIRECTOR_NAME = "MIGUEL DÍAZ JARA";
-        const DECREE = "Decreto Cooperador N° 17.576 del 10 de septiembre de 1965";
+        const DECREE = "Decreto Cooperador de la función Educacional del Estado N° 17.576 del 10 de septiembre de 1965";
 
-        const yearSelect = document.getElementById('year-select');
-        const courseSelect = document.getElementById('course-select');
-        const studentSelect = document.getElementById('student-select');
-        const actionButtons = document.getElementById('action-buttons');
-        const certificateContent = document.getElementById('certificate-content');
-        const previewContainer = document.getElementById('preview-container');
-        const initialPlaceholder = document.getElementById('initial-placeholder');
-        
-        let currentStudents = [];
+        // NÓMINA OFICIAL COMPLETA (NOMBRE + RUT) PARA CARGA MASIVA
+        const NOMINA_OFICIAL = [{"curso": "2A", "nombre": "ALBURQUENQUE DEL GRECO, EMILYA ANTONIA", "rut": "23376817-0"}, {"curso": "2A", "nombre": "ANABALÓN BELTRÁN, BENJAMÍN NICOLÁS", "rut": "22922460-3"}, {"curso": "2A", "nombre": "CONTRERAS SALGADO, HADEEY ALEJANDRA", "rut": "23355953-9"}, {"curso": "2A", "nombre": "FERRADA ALBORNOZ, AGUSTÍN ALEXIS", "rut": "23560082-K"}, {"curso": "2A", "nombre": "IBÁÑEZ GONZÁLEZ, FERNANDA MAGDALENA", "rut": "23644472-4"}, {"curso": "2A", "nombre": "LAGOS LASTRA, ALEXANDRA DANAE", "rut": "23389072-3"}, {"curso": "2A", "nombre": "LÓPEZ LÓPEZ, LUCIANO ANTONIO", "rut": "23498596-5"}, {"curso": "2A", "nombre": "MALDONADO FLORES, ANTONELLA BELÉN", "rut": "23396870-6"}, {"curso": "2A", "nombre": "MARIN MARÍN, IGNACIO ANTONIO", "rut": "22793858-7"}, {"curso": "2A", "nombre": "MONTECINO DÍAZ, VALESKA BELÉN", "rut": "23548214-2"}, {"curso": "2A", "nombre": "MUÑOZ CONTRERAS, LUIS GABRIEL", "rut": "23366642-4"}, {"curso": "2A", "nombre": "MUÑOZ LUNA, ROGER JOEL", "rut": "23622121-0"}, {"curso": "2A", "nombre": "NAVARRO VILLANUEVA, KARLA PAZ", "rut": "23329866-2"}, {"curso": "2A", "nombre": "ORELLANA ARRIAGADA, SEBASTIÁN ANDRÉS", "rut": "23388136-8"}, {"curso": "2A", "nombre": "QUEZADA NARANJO, FELIPE ALONSO", "rut": "23640108-1"}, {"curso": "2A", "nombre": "QUINTEROS VERGARA, FERNANDA FLORENCIA", "rut": "23529637-3"}, {"curso": "2A", "nombre": "RAMÍREZ VILLALOBOS, DUVAN EMILIO", "rut": "23534317-7"}, {"curso": "2A", "nombre": "SANTANDER LÓPEZ, MARÍA JOSÉ", "rut": "23679554-3"}, {"curso": "2A", "nombre": "TAPIA CASTILLA, JEANFRANCO PATRICK", "rut": "23631475-8"}, {"curso": "2A", "nombre": "URBINA CÁCERES, FRANCHESCA POULETTE", "rut": "23007625-1"}, {"curso": "2A", "nombre": "VÁSQUEZ ZALDUENDO, AMANDA ISABEL", "rut": "23584521-0"}, {"curso": "2A", "nombre": "ZABALAGA COFRÉ, DAMIÁN ANDRÉS", "rut": "23404221-1"}, {"curso": "2A", "nombre": "BAEZ DONOSO, LUKAS ALFONSO", "rut": "23461777-K"}, {"curso": "2A", "nombre": "MESA DÍAZ, GONZALO IGNACIO", "rut": "23032545-6"}, {"curso": "2A", "nombre": "ARAVENA ZÚÑIGA, NOEMÍ DE JESÚS DE LAS ESTRELLAS", "rut": "23367234-3"}, {"curso": "2A", "nombre": "ASTUDILLO CAMPOS, CRISTÓBAL ANTONIO", "rut": "22826488-1"}, {"curso": "2A", "nombre": "ASTUDILLO VÁSQUEZ, BRUNO FERNANDO LEÓN", "rut": "23251746-8"}, {"curso": "2A", "nombre": "CUMINAO VIDAL, CATALINA ANDREA", "rut": "23545428-9"}, {"curso": "2A", "nombre": "DÍAZ MALUENDA, MIGUEL ALBERTO", "rut": "23224652-9"}, {"curso": "2A", "nombre": "KILTAN GONZÁLEZ, DIDIER EZEQUIEL", "rut": "23337375-3"}, {"curso": "2A", "nombre": "LÓPEZ ACUÑA, MARCO EMILIO", "rut": "23355954-7"}, {"curso": "2A", "nombre": "LÓPEZ NOVOA, EYDAN DAMIÁN", "rut": "23153879-8"}, {"curso": "2A", "nombre": "MÉNDEZ SUAZO, FABIÁN FELIPE", "rut": "20760552-2"}, {"curso": "2A", "nombre": "MOYA REYES, MATEO ANTONIO BENJAMÍN", "rut": "23391772-9"}, {"curso": "2A", "nombre": "OSES CAMPOS, VALENTINA ABIGAIL", "rut": "23432193-5"}, {"curso": "2A", "nombre": "PALMA ORELLANA, ANTONELLA FRANCISCA", "rut": "23190411-5"}, {"curso": "2A", "nombre": "PEREIRA ORELLANA, MONSERRAT ALAMIRA", "rut": "23605196-K"}, {"curso": "2A", "nombre": "PÉREZ ORMAZÁBAL, ZADKA ALEJANDRA", "rut": "23415461-3"}, {"curso": "2A", "nombre": "ROJAS GONZÁLEZ, FLORENCIA TRINIDAD", "rut": "23290841-6"}, {"curso": "2A", "nombre": "ROJAS LEIVA, EDUARDO JAVIER", "rut": "23264828-7"}, {"curso": "2A", "nombre": "VÁSQUEZ AGUILERA, SCARLET NICOLE", "rut": "22763630-0"}, {"curso": "2A", "nombre": "YÁÑEZ GONZÁLEZ, BRAYAN DAMIÁN", "rut": "23616701-1"}, {"curso": "2A", "nombre": "VARGAS MORAGA, MARTINA SAYEN", "rut": "23555453-4"}, {"curso": "2A", "nombre": "SALAZAR SALAS, PEDRO JOSÉ", "rut": "23301500-8"}, {"curso": "2A", "nombre": "VERA BRAVO, FLORENCIA ANTONIA", "rut": "23296637-8"}, {"curso": "2A", "nombre": "PÉREZ QUEVEDO, CONSTANZA TRINIDAD", "rut": "23479449-3"}, {"curso": "2A", "nombre": "RIQUELME SANTOS, BENJAMÍN ALONSO", "rut": "23112966-9"}, {"curso": "3A", "nombre": "AHUMADA ROJAS, TRINIDAD BELÉN", "rut": "23006149-1"}, {"curso": "3A", "nombre": "ESPINOSA TORRES, FERNANDA ELENA", "rut": "23090163-5"}, {"curso": "3A", "nombre": "ESPINOZA PEÑALILLO, BRAYAN JESÚS", "rut": "23236242-1"}, {"curso": "3A", "nombre": "GONZÁLEZ SALAZAR, EMILIA CATALINA", "rut": "23121508-5"}, {"curso": "3A", "nombre": "MEDEL OJEDA, LEÓN IGNACIO", "rut": "23132468-2"}, {"curso": "3A", "nombre": "MORALES REIMÁN, ALFONSO TOMÁS", "rut": "22617512-1"}, {"curso": "3A", "nombre": "PEREIRA HORMAZÁBAL, MAXIMILIANO EDUARDO", "rut": "23054557-K"}, {"curso": "3A", "nombre": "PINTO TOBAR, JORDÁN AMARO", "rut": "23029359-7"}, {"curso": "3A", "nombre": "RECABAL YÁÑEZ, KEVIN ANDRÉS", "rut": "23086976-6"}, {"curso": "3A", "nombre": "RIQUELME CASTILLO, MATÍAS EDUARDO ANTONIO", "rut": "23284002-1"}, {"curso": "3A", "nombre": "RIVERA ABARZA, CONSTANZA VICTORIA", "rut": "23141589-0"}, {"curso": "3A", "nombre": "SANTIS CASSEUS, TEIVA SCARLETT", "rut": "23294557-5"}, {"curso": "3A", "nombre": "SOBARZO YÉVENES, KATHERINNE ALEXIA BELÉN", "rut": "22912548-6"}, {"curso": "3A", "nombre": "TOLEDO ALBORNOZ, ANTONELLA INES", "rut": "23209204-1"}, {"curso": "3A", "nombre": "VENEGAS ARRIAGADA, ANTONIA EDITH", "rut": "23115030-7"}, {"curso": "3A", "nombre": "VIELMA ZABALAGA, JOAN MANUEL", "rut": "23146366-6"}, {"curso": "3A", "nombre": "MEZA COLIMÁN, ANGEL BLAS", "rut": "23255825-3"}, {"curso": "3A", "nombre": "SAAVEDRA BRAVO, FLORENCIA ALEJANDRA", "rut": "23164383-4"}, {"curso": "3C", "nombre": "ARAYA DOMÍNGUEZ, ALEX FABIÁN", "rut": "22927087-7"}, {"curso": "3C", "nombre": "BRAVO MENARES, ALEX JOHAN", "rut": "23099931-7"}, {"curso": "3C", "nombre": "CARRASCO LEIVA, BENJAMÍN IGNACIO", "rut": "23200990-K"}, {"curso": "3C", "nombre": "CARVAJAL URRUTIA, CONSTANZA PRISILA (DANIEL)", "rut": "23086622-8"}, {"curso": "3C", "nombre": "ENCINA PIZARRO, DIEGO BENJAMÍN ALEXANDER", "rut": "23194660-8"}, {"curso": "3C", "nombre": "FAÚNDEZ NORAMBUENA, ALEJANDRO ANTONIO", "rut": "23229539-2"}, {"curso": "3C", "nombre": "JARAMILLO VILLAR, EMILIO SCOTT", "rut": "22827535-2"}, {"curso": "3C", "nombre": "LÓPEZ VILLAR, MARTÍN ALONSO", "rut": "23321258-K"}, {"curso": "3C", "nombre": "MIRANDA MUÑOZ, ALEXANDRA JAVIERA", "rut": "23285276-3"}, {"curso": "3C", "nombre": "MUÑOZ TRONCOSO, HÉCTOR ANTONIO", "rut": "22459961-7"}, {"curso": "3C", "nombre": "OLIVARES VALENZUELA, ALONSO IGNACIO", "rut": "23097156-0"}, {"curso": "3C", "nombre": "OLIVARES VALENZUELA, ANTONELLA DANAE IGNACIA", "rut": "22804086-K"}, {"curso": "3C", "nombre": "ORELLANA GARRIDO, MATÍAS LEANDRO", "rut": "22876195-8"}, {"curso": "3C", "nombre": "PUNOY MEDEL, MILLARAY ANGÉLICA", "rut": "23113000-4"}, {"curso": "3C", "nombre": "QUIÑENAO MUÑOZ, CRISTÓBAL PATRICIO", "rut": "23118361-2"}, {"curso": "3C", "nombre": "RIQUELME COLOMA, DALIA CONSTANZA", "rut": "23244598-K"}, {"curso": "3C", "nombre": "SALGADO ROJAS, VICENTE MOISÉS", "rut": "23304433-4"}, {"curso": "3C", "nombre": "SANDOVAL CERPA, VICENTE ESTEBAN", "rut": "22922664-9"}, {"curso": "3C", "nombre": "SOTO NARANJO, CHRISTOPHER", "rut": "23230279-8"}, {"curso": "3C", "nombre": "VEKARIC VERDEJO, MARTÍN", "rut": "22907717-1"}, {"curso": "4A", "nombre": "ALCÁNTAR GARCÍA, MARTINA ALEJANDRA", "rut": "22717035-2"}, {"curso": "4A", "nombre": "BAHAMONDE MUÑOZ, ARIEL LEON", "rut": "22202028-K"}, {"curso": "4A", "nombre": "CAMPOS MUÑOZ, CRISTOPHER JESÚS", "rut": "22932851-4"}, {"curso": "4A", "nombre": "CANCINO ORÓSTICA, VICENTE GASPAR", "rut": "22587064-0"}, {"curso": "4A", "nombre": "CARRASCO GONZÁLEZ, CAMILA ANDREA", "rut": "22935345-4"}, {"curso": "4A", "nombre": "COFRÉ CASTILLO, ANTONIO ANDRÉS", "rut": "22852052-7"}, {"curso": "4A", "nombre": "CONTRERAS VENEGAS, BELÉN ALEJANDRA", "rut": "22542992-8"}, {"curso": "4A", "nombre": "GALDAMES VERGARA, FELIPE ESTEBAN", "rut": "22897408-0"}, {"curso": "4A", "nombre": "GARCÍA GONZÁLEZ, SANTIAGO HUMBERTO", "rut": "22152106-4"}, {"curso": "4A", "nombre": "GONZÁLEZ AMIGO, FRANCISCA IGNACIA", "rut": "22820588-5"}, {"curso": "4A", "nombre": "GONZÁLEZ SALAZAR, JOAQUÍN ALONSO", "rut": "22565627-4"}, {"curso": "4A", "nombre": "GUTIÉRREZ GUTIÉRREZ, ANGEL MARTÍN", "rut": "22808692-4"}, {"curso": "4A", "nombre": "MARTÍNEZ LIZANA, AARON ALEJANDRO", "rut": "22970003-0"}, {"curso": "4A", "nombre": "MEZA CARRASCO, BENJAMÍN INTI", "rut": "22482618-4"}, {"curso": "4A", "nombre": "MIÑO GONZALEZ, CATALINA ANDREA", "rut": "22858572-6"}, {"curso": "4A", "nombre": "MORAGA PACHECO, RENATO IGNACIO", "rut": "22932822-0"}, {"curso": "4A", "nombre": "PÉREZ CORÓN, MANUEL IGNACIO", "rut": "22839912-4"}, {"curso": "4A", "nombre": "SAMANIEGO CORTEZ, JAKSON FERGIE", "rut": "100710921-7"}, {"curso": "4A", "nombre": "SEPÚLVEDA SALAZAR, SOFÍA ANTONIA", "rut": "22889391-9"}, {"curso": "4A", "nombre": "TAPIA ACUÑA, GABRIEL ANTONIO", "rut": "22709426-5"}, {"curso": "4A", "nombre": "VEGA VIVANCO, CRISTÓBAL ANTONIO", "rut": "23022549-4"}, {"curso": "4A", "nombre": "VERA NAVARRETE, DANIELA ELIZABETH", "rut": "22903476-6"}, {"curso": "4A", "nombre": "VILLALOBOS ARAVENA, KARINA ANGELINA", "rut": "22792420-9"}, {"curso": "4A", "nombre": "VILLALOBOS VILLALOBOS, SAMIR LUCIAN JESUS", "rut": "22733377-4"}, {"curso": "4A", "nombre": "HERNÁNDEZ SEPÚLVEDA, VICENTE ALEJANDRO", "rut": "22644932-9"}, {"curso": "4A", "nombre": "TORREALBA MOYA, FLORVELIS DE LOS ANGELES", "rut": "100793606-7"}, {"curso": "4A", "nombre": "CARO URRUTIA, CONSUELO ANTONIA", "rut": "23038091-0"}, {"curso": "4A", "nombre": "LOBOS CÁCERES, ANTONIA PAZ", "rut": "22448022-9"}, {"curso": "4C", "nombre": "ARELLANO ACUÑA, MARTÍN ANTONIO", "rut": "22558171-1"}, {"curso": "4C", "nombre": "AROS ÁVILA, DAYANA IGNACIA", "rut": "22897577-K"}, {"curso": "4C", "nombre": "CABRERA COLOMBINO, MARÍA GRACIA", "rut": "22339310-1"}, {"curso": "4C", "nombre": "FUENTES CARRASCO, YARIXA ALEJANDRA", "rut": "22865819-7"}, {"curso": "4C", "nombre": "GÓMEZ CANCINO, DANIELA ALEJANDRA", "rut": "22971225-K"}, {"curso": "4C", "nombre": "GUTIÉRREZ CARRIÓN, MILLARAY CAROLINA", "rut": "22698950-1"}, {"curso": "4C", "nombre": "HONORATO TAPIA, GLORIA JAVIERA", "rut": "22665539-5"}, {"curso": "4C", "nombre": "LARA RIVERA, BENJAMÍN ESTEBAN", "rut": "22907525-K"}, {"curso": "4C", "nombre": "PALACIOS SOTO, JOSÉ TOMÁS", "rut": "22801082-0"}, {"curso": "4C", "nombre": "PEZO SANTANDER, JOSÉ CRISTÓBAL", "rut": "22477831-7"}, {"curso": "4C", "nombre": "ROCHA ROJAS, JOSÉ PABLO WILLIAMS", "rut": "22796354-9"}, {"curso": "4C", "nombre": "ROJAS YÉVENES, FABIANA ISIDORA", "rut": "22876139-7"}, {"curso": "4C", "nombre": "SÁNCHEZ PAREJA, ANDY ANTONIO", "rut": "22916573-9"}, {"curso": "4C", "nombre": "SANTANDER LÓPEZ, SIMÓN ESTEBAN", "rut": "22845486-9"}, {"curso": "4C", "nombre": "TRONCOSO LIZAMA, SIOMARA IGNACIA", "rut": "23004590-9"}, {"curso": "4C", "nombre": "WARNKEN ROJAS, LUCIANA BERNABELA", "rut": "23009921-9"}, {"curso": "4C", "nombre": "DE LA HOZ VALENZUELA, FRANCO SEBASTIÁN", "rut": "22783846-9"}, {"curso": "4C", "nombre": "COLLAO MEDINA, ANAÍS VALENTINA", "rut": "23048274-8"}];
 
-        document.addEventListener('DOMContentLoaded', () => {
-            yearSelect.addEventListener('change', reloadAll);
-            courseSelect.addEventListener('change', loadStudents);
-            studentSelect.addEventListener('change', enableButtons);
-            reloadAll(); 
+        let db, ALL_STUDENTS = [], CURRENT_STUDENT = null;
+
+        window.addEventListener('load', async () => {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                await loadStudentsFromDB();
+            } catch (e) { Swal.fire('Error', 'No se pudo conectar a la base de datos.', 'error'); }
         });
 
-        function getPromotedCourse(course) {
-            const match = course.match(/^(\d+)(.*)$/);
-            if (!match) return course; 
-            const level = parseInt(match[1]);
-            const letter = match[2];
-            if (level >= 4) return null; 
-            return (level + 1) + letter;
+        async function loadStudentsFromDB() {
+            ALL_STUDENTS = [];
+            const courseSelect = document.getElementById('course-select');
+            courseSelect.innerHTML = '<option>Cargando...</option>';
+            try {
+                const snap = await db.collection("alumnos").get();
+                snap.forEach(doc => { ALL_STUDENTS.push({ id: doc.id, ...doc.data() }); });
+                ALL_STUDENTS.sort((a, b) => a.nombre.localeCompare(b.nombre));
+                populateCourseSelect();
+            } catch (e) { console.error(e); courseSelect.innerHTML = '<option>Error</option>'; }
         }
 
-        function getProcessedData() {
-            const is2026 = yearSelect.value === "2026";
-            const grouped = {};
-
-            RAW_DATA.forEach(row => {
-                let course = row[0];
-                const rut = row[1];
-                const name = `${row[2]} ${row[3] || ''} ${row[4]} ${row[5] || ''}`.trim().toUpperCase();
-
-                if (is2026) {
-                    course = getPromotedCourse(course);
-                    if (!course) return; 
-                }
-
-                if (!grouped[course]) grouped[course] = [];
-                grouped[course].push({ rut, name, course });
-            });
-
-            return grouped;
+        function populateCourseSelect() {
+            const select = document.getElementById('course-select');
+            const courses = [...new Set(ALL_STUDENTS.map(s => s.curso))].sort();
+            select.innerHTML = '<option value="">-- Seleccione Curso --</option>';
+            courses.forEach(c => select.innerHTML += `<option value="${c}">${c}</option>`);
         }
 
-        function reloadAll() {
-            const data = getProcessedData();
-            const courses = Object.keys(data).sort();
-            
-            courseSelect.innerHTML = '<option value="">Seleccionar Curso...</option>';
-            courses.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c;
-                opt.textContent = c;
-                courseSelect.appendChild(opt);
-            });
-
-            studentSelect.innerHTML = '<option value="">Seleccione un curso primero</option>';
-            studentSelect.disabled = true;
-            actionButtons.classList.add('hidden');
-            previewContainer.classList.add('hidden');
-            initialPlaceholder.classList.remove('hidden');
-        }
-
-        function loadStudents() {
-            const course = courseSelect.value;
-            const data = getProcessedData();
-            
-            if (course && data[course]) {
-                currentStudents = data[course].sort((a,b) => a.name.localeCompare(b.name));
-                studentSelect.innerHTML = '<option value="">Seleccionar Alumno...</option>';
-                currentStudents.forEach((s, index) => {
-                    const opt = document.createElement('option');
-                    opt.value = index; 
-                    opt.textContent = s.name;
-                    studentSelect.appendChild(opt);
-                });
-                studentSelect.disabled = false;
-            } else {
-                studentSelect.innerHTML = '<option value="">Seleccione un curso primero</option>';
-                studentSelect.disabled = true;
+        window.loadStudentsByCourse = function() {
+            const course = document.getElementById('course-select').value;
+            const select = document.getElementById('student-select');
+            select.innerHTML = '<option value="">-- Seleccione Alumno --</option>';
+            select.disabled = true;
+            document.getElementById('action-zone').classList.add('hidden');
+            if (course) {
+                const filtered = ALL_STUDENTS.filter(s => s.curso === course);
+                filtered.forEach(s => select.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
+                select.disabled = false;
             }
-            actionButtons.classList.add('hidden');
-        }
+        };
 
-        function enableButtons() {
-            if (studentSelect.value !== "") {
-                actionButtons.classList.remove('hidden');
-            } else {
-                actionButtons.classList.add('hidden');
-            }
-        }
-
-        function generateCertificate(type) {
-            const index = studentSelect.value;
-            if (index === "") return;
-
-            const student = currentStudents[index];
-            const year = yearSelect.value;
+        window.selectStudent = function() {
+            const id = document.getElementById('student-select').value;
+            if (!id) { document.getElementById('action-zone').classList.add('hidden'); return; }
+            CURRENT_STUDENT = ALL_STUDENTS.find(s => s.id === id);
             
-            const dateObj = new Date();
-            const day = dateObj.getDate();
-            const months = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-            const month = months[dateObj.getMonth()];
-            const dateStr = `${day} de ${month} de ${dateObj.getFullYear()}`;
+            document.getElementById('display-name').innerText = CURRENT_STUDENT.nombre;
+            const rut = CURRENT_STUDENT.rut || "SIN DATOS";
+            document.getElementById('display-rut').innerText = rut;
+            document.getElementById('display-rut').className = rut === "SIN DATOS" ? "font-bold text-red-500 bg-red-100 px-2 py-0.5 rounded" : "font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded";
+            
+            const year = document.getElementById('year-select').value;
+            let finalCourse = CURRENT_STUDENT.curso;
+            if (year === "2026") finalCourse = getPromotedCourse(finalCourse);
+            
+            document.getElementById('final-course-input').value = finalCourse || "Egresado";
+            document.getElementById('action-zone').classList.remove('hidden');
+        };
 
-            let title, body;
+        function getPromotedCourse(current) {
+            const match = current.match(/^(\d+)(.*)$/);
+            if (!match) return current;
+            let num = parseInt(match[1]);
+            let letter = match[2];
+            if (num >= 4) return "Egresado"; 
+            let nextNum = num + 1;
+            let nextCourse = nextNum + letter;
+            if(nextCourse === "3B") nextCourse = "3C"; 
+            return nextCourse;
+        }
 
-            if (type === 'regular') {
-                title = "CERTIFICADO DE ALUMNO REGULAR";
-                body = `es alumno(a) regular y se encuentra matriculado en el curso <strong>${student.course}</strong>, año escolar <strong>${year}</strong>, de este establecimiento educacional.`;
-            } else {
-                title = "CERTIFICADO DE MATRÍCULA";
-                if (year === "2026") {
-                    body = `ha sido aceptado y matriculado en el curso <strong>${student.course}</strong> para el año escolar <strong>${year}</strong> en este establecimiento educacional.`;
-                } else {
-                    body = `se encuentra matriculado en el curso <strong>${student.course}</strong>, año escolar <strong>${year}</strong>, de este establecimiento educacional.`;
-                }
-            }
+        window.generateCertificate = function(type) {
+            if (!CURRENT_STUDENT) return;
+            const year = document.getElementById('year-select').value;
+            const finalCourse = document.getElementById('final-course-input').value;
+            const dateText = getFormattedDate();
+            
+            let title = type === 'regular' ? "CERTIFICADO DE ALUMNO REGULAR" : "CERTIFICADO DE MATRÍCULA";
+            let body = type === 'regular' 
+                ? `es alumno regular y se encuentra matriculado en el curso <strong>${finalCourse}</strong>, año escolar <strong>${year}</strong>, de este establecimiento educacional.`
+                : (year === "2026" 
+                    ? `ha sido aceptado y matriculado en el curso <strong>${finalCourse}</strong> para el año escolar <strong>${year}</strong> en este establecimiento.`
+                    : `se encuentra matriculado en el curso <strong>${finalCourse}</strong>, año <strong>${year}</strong>.`);
 
-            // --- HTML OPTIMIZADO PARA 1 PLANA (LOGO FIJADO) ---
             const html = `
-                <div class="certificate-container">
-                    
-                    <div class="flex justify-between items-start mb-8">
-                        <div class="text-sm font-sans leading-tight text-gray-800 pt-2">
-                            <p class="font-bold uppercase">Escuela Agrícola Sagrados Corazones</p>
-                            <p>Corporación Educacional Veloz Educa</p>
+                <div class="certificate-page">
+                    <div class="flex justify-between items-start mb-6">
+                        <div class="text-[10pt] leading-tight">
+                            <p class="font-bold uppercase">${SCHOOL_NAME}</p>
                             <p>${LOCATION}</p>
                         </div>
-                        <div>
-                            <img src="logo.jpg" alt="Insignia" class="h-24 w-auto object-contain" onerror="this.style.display='none'">
-                        </div>
+                        <img src="logo.jpg" alt="Logo" style="height: 70px;">
                     </div>
 
-                    <div class="text-center mb-8">
-                        <h2 class="text-2xl font-bold uppercase underline decoration-2 underline-offset-4">${title}</h2>
+                    <div class="text-center mb-8 mt-4">
+                        <h2 class="text-2xl font-bold uppercase border-b-2 border-black inline-block pb-1">${title}</h2>
                     </div>
 
-                    <div class="text-lg leading-normal text-justify mb-6 px-4 font-serif">
-                        <p class="mb-6">
-                            Quien suscribe, Director de la <strong>${SCHOOL_NAME}</strong> de ${LOCATION}, ${DECREE},
-                            <strong>CERTIFICA</strong>:
+                    <div class="text-[12pt] leading-normal text-justify mb-8">
+                        <p class="mb-4">
+                            Quien suscribe, Director de la ${SCHOOL_NAME}, ${DECREE}, <strong>CERTIFICA</strong>:
                         </p>
-                        <p class="mb-6 indent-8">
-                            Que, el alumno(a) <strong class="uppercase">${student.name}</strong>, 
-                            R.U.T. <strong>${student.rut}</strong>, ${body}
+                        <p class="mb-4 indent-8">
+                            Que, don(a) <strong class="uppercase">${CURRENT_STUDENT.nombre}</strong>, 
+                            RUT <strong>${CURRENT_STUDENT.rut || "______________"}</strong>, ${body}
                         </p>
                         <p class="indent-8">
-                            Se extiende el presente certificado a petición del interesado(a), para los fines que estime conveniente.
+                            Se extiende el presente certificado a petición del interesado para los fines que estime conveniente.
                         </p>
                     </div>
 
-                    <div class="text-right text-lg mb-12 px-4 font-serif">
-                        ${LOCATION}, ${dateStr}.
+                    <div class="text-right mt-12 text-[12pt]">
+                        <p>${dateText}</p>
                     </div>
 
-                    <div class="text-center mt-12">
-                        <div class="inline-block border-t border-black pt-2 px-10 font-sans">
-                            <p class="font-bold text-lg uppercase">${DIRECTOR_NAME}</p>
-                            <p class="text-base font-bold">DIRECTOR</p>
-                            <p class="text-sm uppercase">${SCHOOL_NAME}</p>
+                    <div class="mt-28 text-center">
+                        <div class="inline-block border-t border-black pt-2 px-12">
+                            <p class="font-bold text-lg">${DIRECTOR_NAME}</p>
+                            <p class="uppercase text-xs tracking-wider">Director</p>
                         </div>
                     </div>
-
+                    
+                    <div class="absolute bottom-4 left-0 w-full text-center text-[9px] text-gray-400 no-print">
+                        Plataforma Gestión 2026 • Desarrollado por ProfeAle
+                    </div>
                 </div>
             `;
+            document.getElementById('certificate-content').innerHTML = html;
+            document.getElementById('certificate-container').classList.remove('hidden');
+            document.getElementById('certificate-container').scrollIntoView({behavior: 'smooth'});
+        };
 
-            certificateContent.innerHTML = html;
-            initialPlaceholder.classList.add('hidden');
-            previewContainer.classList.remove('hidden');
+        // --- FUNCIÓN DE RESET TOTAL (CARGA DE NÓMINA) ---
+        window.fullDatabaseReset = async function() {
+            if(!confirm("⚠️ PELIGRO ⚠️\n\n¿Estás seguro de BORRAR TODOS los alumnos actuales y volver a cargar la nómina oficial completa (con RUTs)?\n\nEsto solucionará los problemas de datos faltantes.")) return;
+            
+            Swal.fire({title: 'Restaurando Base de Datos...', text: 'Borrando registros antiguos...', didOpen: () => Swal.showLoading()});
+            
+            try {
+                // 1. Borrar todo por lotes
+                const snap = await db.collection("alumnos").get();
+                let batch = db.batch();
+                let count = 0;
+                
+                for (const doc of snap.docs) {
+                    batch.delete(doc.ref);
+                    count++;
+                    if (count >= 100) { await batch.commit(); batch = db.batch(); count = 0; }
+                }
+                if (count > 0) await batch.commit();
+
+                // 2. Insertar nómina oficial
+                Swal.update({ text: 'Cargando nómina oficial...' });
+                let batchInsert = db.batch();
+                let insertCount = 0;
+                
+                for (const student of NOMINA_OFICIAL) {
+                    const ref = db.collection("alumnos").doc();
+                    batchInsert.set(ref, student);
+                    insertCount++;
+                    if (insertCount >= 100) { await batchInsert.commit(); batchInsert = db.batch(); insertCount = 0; }
+                }
+                if (insertCount > 0) await batchInsert.commit();
+
+                await loadStudentsFromDB();
+                Swal.fire('¡Base de Datos Restaurada!', 'Se han cargado 131 alumnos con sus RUTs correctamente.', 'success');
+            } catch(e) {
+                console.error(e);
+                Swal.fire('Error', 'Hubo un problema durante la restauración.', 'error');
+            }
+        };
+
+        window.addStudentToDB = async function() {
+            const course = document.getElementById('new-course').value.toUpperCase().trim();
+            const name = document.getElementById('new-name').value.toUpperCase().trim();
+            const rut = document.getElementById('new-rut').value.toUpperCase().trim();
+            if (!course || !name) { Swal.fire('Error', 'Faltan datos', 'warning'); return; }
+            await db.collection("alumnos").add({ nombre: name, curso: course, rut: rut });
+            Swal.fire('Listo', 'Alumno guardado', 'success');
+            loadStudentsFromDB();
+        };
+
+        function getFormattedDate() {
+            const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            const d = new Date();
+            return `${LOCATION}, ${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
+        }
+        
+        window.switchTab = function(tab) {
+            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-generator').classList.add('hidden');
+            document.getElementById('tab-manage').classList.add('hidden');
+            document.getElementById('tab-' + tab).classList.remove('hidden');
+        };
+        
+        window.resetSelection = function() {
+            document.getElementById('action-zone').classList.add('hidden');
+            document.getElementById('certificate-container').classList.add('hidden');
+            if (CURRENT_STUDENT) selectStudent();
         }
     </script>
 </body>
